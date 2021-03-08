@@ -5,6 +5,7 @@ mod player;
 mod map;
 mod components;
 mod rain_system;
+mod rect;
 
 use components::{Position, Renderable, Player, Droplet};
 
@@ -44,7 +45,7 @@ impl GameState for State {
 
 fn main() -> rltk::BError {
     let context = RltkBuilder::simple(80, 50).unwrap()
-        .with_tile_dimensions(24, 24)
+        .with_tile_dimensions(16, 16)
         .with_title("Roguelike")
         .build()?;
 
@@ -59,8 +60,12 @@ fn main() -> rltk::BError {
         ecs: Ecs {world: World::default(), schedule: schedule, resources: resources}
     };
 
+    let (map, rooms) = map::new_map_rooms_corridors();
+    gs.ecs.resources.insert(map);
+    let (player_x, player_y) = rooms[0].center();
+
     gs.ecs.world.push((
-        Position {x: 20, y: 20},
+        Position {x: player_x, y: player_y},
         Renderable {
             glyph: rltk::to_cp437('Ω'),
             fg: rltk::RGB::named(rltk::PINK),
@@ -81,7 +86,6 @@ fn main() -> rltk::BError {
         ));
     }
 
-    gs.ecs.resources.insert(map::new_random_map());
 
     rltk::main_loop(context, gs)
 }
