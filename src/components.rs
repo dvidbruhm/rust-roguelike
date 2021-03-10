@@ -20,4 +20,10 @@ pub struct Viewshed {
     pub dirty: bool
 }
 
+pub struct Monster {}
+
+pub struct Name {
+    pub name: String
+}
+
 pub struct Droplet {}

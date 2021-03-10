@@ -21,7 +21,7 @@ pub fn rain(pos: &mut Position, ren: &mut Renderable, _rm: &Droplet, #[resource]
             }
             else if map.get_tile(pos.x, pos.y) == TileType::Floor {
                 ren.render = true;
-                ren.bg = rltk::RGB::named(rltk::BLACK);
+                ren.bg = rltk::RGB::from_f32(0.2, 0.1, 0.0);
             }
         }
         else {
