@@ -7,9 +7,10 @@ mod components;
 mod rain_system;
 mod visibility_system;
 mod monster_ai_system;
+mod map_indexing_system;
 mod rect;
 
-use components::{Position, Renderable, Player, Viewshed, Monster, Name};
+use components::{Position, Renderable, Player, Viewshed, Monster, Name, BlocksTile, CombatStats};
 use map::{Map};
 
 
@@ -76,6 +77,7 @@ fn main() -> rltk::BError {
         .add_system(rain_system::rain_system())
         .add_system(visibility_system::visibility_system())
         .add_system(monster_ai_system::monster_ai_system())
+        .add_system(map_indexing_system::map_indexing_system())
         .build();
 
     let mut gs = State {
@@ -101,7 +103,8 @@ fn main() -> rltk::BError {
             range: 8,
             dirty: true
         },
-        Name {name: "Blabinou".to_string()}
+        Name {name: "Blabinou".to_string()},
+        CombatStats {max_hp: 30, hp: 30, defense: 2, power: 5}
     ));
 
     //Monsters
@@ -120,7 +123,9 @@ fn main() -> rltk::BError {
                 dirty: true
             },
             Monster {},
-            Name {name: format!("Wierd y #{}", i)}
+            Name {name: format!("Wierd y #{}", i)},
+            BlocksTile {},
+            CombatStats {max_hp: 15, hp: 15, defense: 1, power: 4}
         ));
     }
 

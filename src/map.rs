@@ -1,4 +1,5 @@
 use std::cmp as cmp;
+use legion::*;
 use rltk;
 use rltk::{RGB, RandomNumberGenerator, Rltk, Algorithm2D, BaseMap, Point};
 use crate::{State};
@@ -15,7 +16,9 @@ pub struct Map {
     pub width : i32,
     pub height : i32,
     pub revealed_tiles : Vec<bool>,
-    pub visible_tiles : Vec<bool>
+    pub visible_tiles : Vec<bool>,
+    pub blocked : Vec<bool>,
+    pub tile_content : Vec<Vec<Entity>>
 }
 
 impl Map {
@@ -30,6 +33,28 @@ impl Map {
 
     pub fn xy_idx(&self, x: i32, y: i32) -> usize {
         (y as usize * self.width as usize) + x as usize
+    }
+    
+    pub fn idx_xy(&self, idx: usize) -> (i32, i32) {
+        (idx as i32 % self.width, idx as i32 / self.width)
+    }
+
+    pub fn set_blocked(&mut self) {
+        for (i, t) in self.tiles.iter_mut().enumerate() {
+            self.blocked[i] = *t == TileType::Wall;
+        }
+    }
+    
+    pub fn clear_tile_content(&mut self) {
+        for content in self.tile_content.iter_mut() {
+            content.clear();
+        }
+    }
+
+    fn is_exit_valid(&self, x:i32, y:i32) -> bool {
+        if x < 0 || x >= self.width || y < 0 || y >= self.height { return false; }
+        let idx = self.xy_idx(x, y);
+        !self.blocked[idx]
     }
 
     fn apply_room_to_map(&mut self, room: &Rect) {
@@ -59,7 +84,9 @@ impl Map {
             width: 80,
             height: 50,
             revealed_tiles: vec![false; 80 * 50],
-            visible_tiles: vec![false; 80 * 50]
+            visible_tiles: vec![false; 80 * 50],
+            blocked: vec![false; 80 * 50],
+            tile_content: vec![Vec::new(); 80 * 50]
         };
         let mut rng = RandomNumberGenerator::new();
 
@@ -107,6 +134,32 @@ impl Algorithm2D for Map {
 impl BaseMap for Map {
     fn is_opaque(&self, idx: usize) -> bool {
         self.tiles[idx] == TileType::Wall
+    }
+
+    fn get_pathing_distance(&self, idx1: usize, idx2: usize) -> f32 {
+        let (x1, y1) = self.idx_xy(idx1);
+        let (x2, y2) = self.idx_xy(idx2);
+        let p1 = Point::new(x1, y1);
+        let p2 = Point::new(x2, y2);
+        rltk::DistanceAlg::Pythagoras.distance2d(p1, p2)
+    }
+
+    fn get_available_exits(&self, idx: usize) -> rltk::SmallVec<[(usize, f32); 10]> {
+        let mut exits = rltk::SmallVec::new();
+        let (x, y) = self.idx_xy(idx);
+        let w = self.width as usize;
+
+        if self.is_exit_valid(x - 1, y) { exits.push((idx - 1, 1.0)) };
+        if self.is_exit_valid(x + 1, y) { exits.push((idx + 1, 1.0)) };
+        if self.is_exit_valid(x, y - 1) { exits.push((idx - w, 1.0)) };
+        if self.is_exit_valid(x, y + 1) { exits.push((idx + w, 1.0)) };
+
+        if self.is_exit_valid(x - 1, y - 1) { exits.push((idx - w - 1, 1.45)) };
+        if self.is_exit_valid(x + 1, y - 1) { exits.push((idx - w + 1, 1.45)) };
+        if self.is_exit_valid(x - 1, y + 1) { exits.push((idx + w - 1, 1.45)) };
+        if self.is_exit_valid(x + 1, y + 1) { exits.push((idx + w + 1, 1.45)) };
+
+        exits
     }
 }
 
