@@ -1,33 +1,33 @@
 use rltk::{Rltk, GameState, RltkBuilder};
-use legion::*;
+use hecs::*;
+use resources::Resources;
 
 mod player;
 mod map;
 mod components;
-mod rain_system;
 mod visibility_system;
 mod monster_ai_system;
 mod map_indexing_system;
+mod melee_combat_system;
+mod damage_system;
 mod rect;
 
 use components::{Position, Renderable, Player, Viewshed, Monster, Name, BlocksTile, CombatStats};
 use map::{Map};
 
 
-struct Ecs {
-    world: World,
-    resources: Resources,
-    schedule: Schedule
-}
-
 pub struct State {
-    ecs: Ecs,
-    run_state: RunState
+    world: World,
+    resources: Resources
 }
 
 impl State {
     fn run_systems(&mut self) {
-        self.ecs.schedule.execute(&mut self.ecs.world, &mut self.ecs.resources);
+        visibility_system::visibility(&mut self.world, &mut self.resources);
+        monster_ai_system::monster_ai(&mut self.world, &mut self.resources);
+        map_indexing_system::map_indexing(&mut self.world, &mut self.resources);
+        melee_combat_system::melee_combat(&mut self.world);
+        damage_system::damage(&mut self.world);
     }
 }
 
@@ -35,21 +35,36 @@ impl GameState for State {
     fn tick(&mut self, ctx: &mut Rltk) {
         ctx.cls();
 
-        if self.run_state == RunState::Running {
-            self.run_systems();
-            self.run_state = RunState::Paused;
+        let mut new_runstate: RunState = *self.resources.get::<RunState>().unwrap();
+
+        match new_runstate {
+            RunState::PreRun => {
+                self.run_systems();
+                new_runstate = RunState::AwaitingInput;
+            }
+            RunState::AwaitingInput => {
+                new_runstate = player::player_input(self, ctx);
+            }
+            RunState::PlayerTurn => {
+                self.run_systems();
+                new_runstate = RunState::MonsterTurn;
+            }
+            RunState::MonsterTurn => {
+                self.run_systems();
+                new_runstate = RunState::AwaitingInput;
+            }
         }
-        else if self.run_state == RunState::Paused {
-            self.run_state = player::player_input(self, ctx);
-        }
+
+        self.resources.insert::<RunState>(new_runstate).unwrap();
+
+        damage_system::delete_the_dead(&mut self.world);
 
         map::draw_map(&self, ctx);
 
-        let map = self.ecs.resources.get::<Map>().unwrap();
-        let mut query = <(&Position, &Renderable)>::query();
+        let map = self.resources.get::<Map>().unwrap();
 
 
-        for (pos, render) in query.iter(&self.ecs.world) {
+        for (_id, (pos, render)) in self.world.query_mut::<(&Position, &Renderable)>() {
             let idx = map.xy_idx(pos.x, pos.y);
             if render.render && map.visible_tiles[idx] {
                 ctx.set(pos.x, pos.y, render.fg, render.bg, render.glyph);
@@ -61,8 +76,8 @@ impl GameState for State {
     }
 }
 
-#[derive(Copy, Clone, PartialEq)]
-pub enum RunState { Paused, Running }
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub enum RunState { AwaitingInput, PreRun, PlayerTurn, MonsterTurn }
 
 fn main() -> rltk::BError {
     let context = RltkBuilder::simple(80, 50).unwrap()
@@ -70,26 +85,16 @@ fn main() -> rltk::BError {
         .with_title("Roguelike")
         .build()?;
 
-    let resources = Resources::default();
-
-
-    let schedule = Schedule::builder()
-        .add_system(rain_system::rain_system())
-        .add_system(visibility_system::visibility_system())
-        .add_system(monster_ai_system::monster_ai_system())
-        .add_system(map_indexing_system::map_indexing_system())
-        .build();
-
     let mut gs = State {
-        ecs: Ecs {world: World::default(), schedule: schedule, resources: resources},
-        run_state: RunState::Running
+        world: World::new(),
+        resources: Resources::default()
     };
 
     let map: Map = Map::new_map_rooms_corridors(30, 4, 15);
     let (player_x, player_y) = map.rooms[0].center();
 
     // Player
-    gs.ecs.world.push((
+    let player_id = gs.world.spawn((
         Position {x: player_x, y: player_y},
         Renderable {
             glyph: rltk::to_cp437('ô'),
@@ -100,7 +105,7 @@ fn main() -> rltk::BError {
         Player {},
         Viewshed {
             visible_tiles: Vec::new(),
-            range: 8,
+            range: 20,
             dirty: true
         },
         Name {name: "Blabinou".to_string()},
@@ -109,7 +114,7 @@ fn main() -> rltk::BError {
 
     //Monsters
     for (i, r) in map.rooms.iter().skip(1).enumerate() {
-        gs.ecs.world.push((
+        gs.world.spawn((
             Position {x: r.center().0, y: r.center().1},
             Renderable {
                 glyph: rltk::to_cp437('ÿ'),
@@ -119,31 +124,20 @@ fn main() -> rltk::BError {
             },
             Viewshed {
                 visible_tiles: Vec::new(),
-                range: 6,
+                range: 8,
                 dirty: true
             },
             Monster {},
             Name {name: format!("Wierd y #{}", i)},
             BlocksTile {},
-            CombatStats {max_hp: 15, hp: 15, defense: 1, power: 4}
+            CombatStats {max_hp: 8, hp: 8, defense: 1, power: 4}
         ));
     }
 
-    //Droplets
-    /*for i in 0..50 {
-        gs.ecs.world.push((
-            Position {x: i * 4, y: i * 2},
-            Renderable {
-                glyph: rltk::to_cp437('•'),
-                fg: rltk::RGB::named(rltk::BLUE),
-                bg: rltk::RGB::from_f32(0., 0.1, 0.),
-                render: true
-            },
-            Droplet {}
-        ));
-    }*/
+    gs.resources.insert(map);
+    gs.resources.insert(rltk::Point::new(player_x, player_y));
+    gs.resources.insert(player_id);
+    gs.resources.insert(RunState::PreRun);
 
-    gs.ecs.resources.insert(map);
-    gs.ecs.resources.insert(rltk::Point::new(player_x, player_y));
     rltk::main_loop(context, gs)
 }

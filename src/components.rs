@@ -1,4 +1,4 @@
-use legion::*;
+use hecs::*;
 use rltk;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -54,9 +54,23 @@ pub struct TakeDamage {
 }
 
 impl TakeDamage {
-    fn add_damage(td: &mut TakeDamage, victim: Entity, amount: i32) {
-        //todo
+    pub fn add_damage(world: &mut World, victim: Entity, amount: i32) {
+        let mut needs_take_damage = false;
+
+        {
+            let take_damage = world.get_mut::<TakeDamage>(victim);
+            match take_damage {
+                Ok(mut take_dmg) => {
+                    take_dmg.amount.push(amount);
+                },
+                Err(_e) => {
+                    needs_take_damage = true;
+                }
+            }
+        }
+
+        if needs_take_damage {
+            let _res = world.insert_one(victim, TakeDamage{amount: vec![amount]});
+        }
     }
 }
-
-pub struct Droplet {}

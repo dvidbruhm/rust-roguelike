@@ -1,5 +1,5 @@
 use std::cmp as cmp;
-use legion::*;
+use hecs::*;
 use rltk;
 use rltk::{RGB, RandomNumberGenerator, Rltk, Algorithm2D, BaseMap, Point};
 use crate::{State};
@@ -22,10 +22,6 @@ pub struct Map {
 }
 
 impl Map {
-    pub fn get_tile(&self, x: i32, y: i32) -> TileType {
-        self.tiles[self.xy_idx(x, y)]
-    }
-    
     pub fn set_tile(&mut self, x: i32, y: i32, value: TileType) {
         let idx = self.xy_idx(x, y);
         self.tiles[idx] = value;
@@ -52,7 +48,7 @@ impl Map {
     }
 
     fn is_exit_valid(&self, x:i32, y:i32) -> bool {
-        if x < 0 || x >= self.width || y < 0 || y >= self.height { return false; }
+        if x < 1 || x >= self.width || y < 1 || y >= self.height { return false; }
         let idx = self.xy_idx(x, y);
         !self.blocked[idx]
     }
@@ -137,10 +133,14 @@ impl BaseMap for Map {
     }
 
     fn get_pathing_distance(&self, idx1: usize, idx2: usize) -> f32 {
-        let (x1, y1) = self.idx_xy(idx1);
-        let (x2, y2) = self.idx_xy(idx2);
-        let p1 = Point::new(x1, y1);
-        let p2 = Point::new(x2, y2);
+        //let (x1, y1) = self.idx_xy(idx1);
+        //let (x2, y2) = self.idx_xy(idx2);
+        //let p1 = Point::new(x1, y1);
+        //let p2 = Point::new(x2, y2);
+        //rltk::DistanceAlg::Pythagoras.distance2d(p1, p2)
+        let w = self.width as usize;
+        let p1 = Point::new(idx1 % w, idx1 / w);
+        let p2 = Point::new(idx2 % w, idx2 / w);
         rltk::DistanceAlg::Pythagoras.distance2d(p1, p2)
     }
 
@@ -164,7 +164,7 @@ impl BaseMap for Map {
 }
 
 pub fn draw_map(gs: &State, ctx : &mut Rltk) {
-    let map = gs.ecs.resources.get::<Map>().unwrap();
+    let map = gs.resources.get::<Map>().unwrap();
     let mut y = 0;
     let mut x = 0;
 

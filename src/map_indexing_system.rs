@@ -1,25 +1,22 @@
-use legion::*;
-use legion::world::{SubWorld};
+use hecs::*;
+use resources::Resources;
 use crate::map::{Map};
 use crate::components::{BlocksTile, Position};
 
 
-#[system]
-#[read_component(BlocksTile)]
-#[read_component(Position)]
-pub fn map_indexing(sworld: &SubWorld, #[resource] map: &mut Map) {
-    let mut query = <(Entity, Option<&BlocksTile>, &Position)>::query();
+pub fn map_indexing(world: &mut World, res: &mut Resources) {
+    let map: &mut Map = &mut res.get_mut::<Map>().unwrap();
 
     map.set_blocked();
     map.clear_tile_content();
 
-    for (ent, _bt, pos) in query.iter(sworld) {
+    for (id, (_bt, pos)) in world.query_mut::<(Option<&BlocksTile>, &Position)>() {
         let idx = map.xy_idx(pos.x, pos.y);
 
         if let Some(_bt) = _bt {
             map.blocked[idx] = true;
         }
 
-        map.tile_content[idx].push(*ent);
+        map.tile_content[idx].push(id);
     }
 }
