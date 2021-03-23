@@ -1,7 +1,11 @@
 use hecs::*;
+use resources::*;
 use crate::components::{WantsToAttack, Name, CombatStats, TakeDamage};
+use crate::gamelog::{GameLog};
 
-pub fn melee_combat(world: &mut World) {
+pub fn melee_combat(world: &mut World, res: &mut Resources) {
+    let mut log = res.get_mut::<GameLog>().unwrap();
+
     let mut to_remove_wants_melee: Vec<Entity> = vec![];
     let mut to_add_damage: Vec<(Entity, i32)> = vec![];
 
@@ -14,10 +18,10 @@ pub fn melee_combat(world: &mut World) {
                 let damage = i32::max(0, stats.power - target_stats.defense);
                 
                 if damage == 0 {
-                    println!("{} is unable to hurt {}", &name.name, &target_name.name);
+                    log.messages.push(format!("{} is unable to hurt {}", &name.name, &target_name.name));
                 }
                 else {
-                    println!("{} hits {} for {} damage (and has {} hp)", &name.name, &target_name.name, damage, &target_stats.hp);
+                    log.messages.push(format!("{} hits {} for {} hp", &name.name, &target_name.name, damage));
                     to_add_damage.push((wants_attack.target, damage));
                 }
             }

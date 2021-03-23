@@ -34,7 +34,6 @@ pub fn monster_ai(world: &mut World, res: &mut Resources) {
             );
 
             if path.success && path.steps.len() > 1 {
-                println!("moving");
                 let (new_x, new_y) = map.idx_xy(path.steps[1]);
                 let mut idx = map.xy_idx(pos.x, pos.y);
                 map.blocked[idx] = false;

@@ -1,10 +1,12 @@
 use std::cmp::{max, min};
-use rltk::{Rltk, VirtualKeyCode};
+use rltk::{Rltk, VirtualKeyCode, Point};
 use hecs::*;
+use resources::*;
 
 use crate::{State, RunState};
 use crate::map::{Map};
-use crate::components::{Position, Player, Viewshed, CombatStats, WantsToAttack};
+use crate::components::{Position, Player, Viewshed, CombatStats, WantsToAttack, Item, WantsToPickupItem};
+use crate::gamelog::{GameLog};
 
 pub fn try_move_player(dx: i32, dy: i32, gs: &mut State) {
     let map = gs.resources.get::<Map>().unwrap();
@@ -41,6 +43,30 @@ pub fn try_move_player(dx: i32, dy: i32, gs: &mut State) {
     }
 }
 
+pub fn get_item(world: &mut World, res: &mut Resources){
+    let player_id = res.get::<Entity>().unwrap();
+    let player_pos = res.get::<Point>().unwrap();
+    let mut log = res.get_mut::<GameLog>().unwrap();
+
+    let mut target_item: Option<Entity> = None;
+
+    for (id, (_item, pos)) in &mut world.query::<(&Item, &Position)>() {
+        if pos.x == player_pos.x && pos.y == player_pos.y {
+            target_item = Some(id);
+        }
+    }
+
+    match target_item {
+        None => {log.messages.push(format!("There is nothing to pick up here"))}
+        Some(item) => {
+            let _res = world.insert_one(*player_id, WantsToPickupItem {
+                collected_by: *player_id,
+                item: item
+            });
+        }
+    }
+}
+
 pub fn player_input(gs: &mut State, ctx: &mut Rltk) -> RunState {
     match ctx.key {
         None => { return RunState::AwaitingInput }
@@ -53,6 +79,8 @@ pub fn player_input(gs: &mut State, ctx: &mut Rltk) -> RunState {
             VirtualKeyCode::U => try_move_player(1, -1, gs),
             VirtualKeyCode::N => try_move_player(1, 1, gs),
             VirtualKeyCode::B => try_move_player(-1, 1, gs),
+            VirtualKeyCode::G => get_item(&mut gs.world, &mut gs.resources),
+            VirtualKeyCode::I => return RunState::ShowInventory,
             _ => { return RunState::AwaitingInput }
         }
     }

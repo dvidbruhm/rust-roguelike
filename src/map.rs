@@ -1,9 +1,16 @@
 use std::cmp as cmp;
 use hecs::*;
 use rltk;
-use rltk::{RGB, RandomNumberGenerator, Rltk, Algorithm2D, BaseMap, Point};
-use crate::{State};
+use rltk::{RandomNumberGenerator, Rltk, Algorithm2D, BaseMap, Point};
+use crate::{State, Palette};
 use crate::rect::{Rect};
+
+
+pub const MAPWIDTH: usize = 80;
+pub const MAPHEIGHT: usize = 40;
+pub const MAPCOUNT: usize = MAPWIDTH * MAPHEIGHT;
+pub const OFFSET_X: usize = 0;
+pub const OFFSET_Y: usize = 11;
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub enum TileType {
@@ -47,6 +54,14 @@ impl Map {
         }
     }
 
+    pub fn transform_mouse_pos(&self, mouse_pos: (i32, i32)) -> (i32, i32) {
+        (mouse_pos.0 - OFFSET_X as i32, mouse_pos.1 - OFFSET_Y as i32)
+    }
+
+    pub fn mouse_in_bounds(&self, mouse_pos: (i32, i32)) -> bool {
+        mouse_pos.0 >= 0  && mouse_pos.0 <= self.width && mouse_pos.1 >= 0 && mouse_pos.1 <= self.height
+    }
+
     fn is_exit_valid(&self, x:i32, y:i32) -> bool {
         if x < 1 || x >= self.width || y < 1 || y >= self.height { return false; }
         let idx = self.xy_idx(x, y);
@@ -75,14 +90,14 @@ impl Map {
 
     pub fn new_map_rooms_corridors(max_rooms: i32, min_size: i32, max_size: i32) -> Map {
         let mut map = Map {
-            tiles: vec![TileType::Wall; 80 * 50],
+            tiles: vec![TileType::Wall; MAPCOUNT],
             rooms: Vec::new(),
-            width: 80,
-            height: 50,
-            revealed_tiles: vec![false; 80 * 50],
-            visible_tiles: vec![false; 80 * 50],
-            blocked: vec![false; 80 * 50],
-            tile_content: vec![Vec::new(); 80 * 50]
+            width: MAPWIDTH as i32,
+            height: MAPHEIGHT as i32,
+            revealed_tiles: vec![false; MAPCOUNT],
+            visible_tiles: vec![false; MAPCOUNT],
+            blocked: vec![false; MAPCOUNT],
+            tile_content: vec![Vec::new(); MAPCOUNT]
         };
         let mut rng = RandomNumberGenerator::new();
 
@@ -133,11 +148,6 @@ impl BaseMap for Map {
     }
 
     fn get_pathing_distance(&self, idx1: usize, idx2: usize) -> f32 {
-        //let (x1, y1) = self.idx_xy(idx1);
-        //let (x2, y2) = self.idx_xy(idx2);
-        //let p1 = Point::new(x1, y1);
-        //let p2 = Point::new(x2, y2);
-        //rltk::DistanceAlg::Pythagoras.distance2d(p1, p2)
         let w = self.width as usize;
         let p1 = Point::new(idx1 % w, idx1 / w);
         let p2 = Point::new(idx2 % w, idx2 / w);
@@ -175,21 +185,21 @@ pub fn draw_map(gs: &State, ctx : &mut Rltk) {
             let mut bg;
             match tile {
                 TileType::Floor => {
-                    fg = RGB::from_f32(0., 0., 0.);
-                    bg = RGB::from_f32(0.2, 0.1, 0.);
-                    glyph = rltk::to_cp437(' ');
+                    fg = Palette::COLOR_2;
+                    bg = Palette::MAIN_BG;
+                    glyph = rltk::to_cp437('░');
                 }
                 TileType::Wall => {
-                    fg = RGB::from_f32(0.6, 0.3, 0.0);
-                    bg = RGB::from_f32(0., 0.1, 0.);
-                    glyph = rltk::to_cp437('█');
+                    fg = Palette::MAIN_FG;
+                    bg = Palette::MAIN_BG;
+                    glyph = rltk::to_cp437('▓');
                 }
             }
             if !map.visible_tiles[idx] {
                 fg = fg.to_greyscale();
                 bg = bg.to_greyscale();
             }
-            ctx.set(x, y, fg, bg, glyph);
+            ctx.set(x + OFFSET_X, y + OFFSET_Y, fg, bg, glyph);
         }
         x += 1;
         if x > 79 {

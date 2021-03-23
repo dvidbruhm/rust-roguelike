@@ -12,7 +12,8 @@ pub struct Renderable {
     pub glyph: rltk::FontCharType,
     pub fg: rltk::RGB,
     pub bg: rltk::RGB,
-    pub render: bool
+    pub render: bool,
+    pub order: i32
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -47,6 +48,31 @@ pub struct CombatStats {
 
 pub struct WantsToAttack {
     pub target: Entity
+}
+
+#[derive(Clone, Copy)]
+pub struct WantsToPickupItem {
+    pub collected_by: Entity,
+    pub item: Entity
+}
+
+#[derive(Clone, Copy)]
+pub struct WantsToDropItem {
+    pub item: Entity
+}
+
+pub struct Item {}
+
+pub struct InBackpack {
+    pub owner: Entity
+}
+
+pub struct Potion {
+    pub heal: i32
+}
+
+pub struct WantsToDrinkPotion {
+    pub potion: Entity
 }
 
 pub struct TakeDamage {
