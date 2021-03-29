@@ -1,7 +1,7 @@
 use hecs::*;
 use resources::*;
 use rltk::{RandomNumberGenerator};
-use crate::components::{Position, Renderable, Player, Viewshed, Name, CombatStats, BlocksTile, Monster, Item, Potion};
+use crate::components::{Position, Renderable, Player, Viewshed, Name, CombatStats, BlocksTile, Monster, Item, Consumable, ProvidesHealing, DealsDamage, Ranged, AreaOfEffect, Confusion};
 use crate::{Palette};
 use crate::rect::{Rect};
 
@@ -36,6 +36,17 @@ pub fn random_monster(world: &mut World, res: &mut Resources, x: i32, y: i32) {
     match roll {
         0 => { orc(world, x, y); }
         _ => { goblin(world, x, y); }
+    }
+}
+
+pub fn random_item(world: &mut World, res: &mut Resources, x:i32, y:i32) {
+    let rng = &mut res.get_mut::<RandomNumberGenerator>().unwrap();
+    let roll = rng.range(0, 4);
+    match roll {
+        0 => { health_potion(world, x, y); }
+        1 => { fireball_scroll(world, x, y); }
+        2 => { confusion_scroll(world, x, y); }
+        _ => { magic_missile_scroll(world, x, y); }
     }
 }
 
@@ -76,7 +87,7 @@ pub fn fill_room(world: &mut World, res: &mut Resources, room: &Rect) {
         random_monster(world, res, *x, *y);
     }
     for (x, y) in item_spawn_points.iter() {
-        health_potion(world, *x, *y);
+        random_item(world, res, *x, *y);
     }
 }
 
@@ -122,6 +133,62 @@ fn health_potion(world: &mut World, x: i32, y:i32) {
         },
         Name {name: "Health potion".to_string()},
         Item {},
-        Potion { heal: 8 }
+        ProvidesHealing { heal: 8 },
+        Consumable {}
+    ));
+}
+
+fn magic_missile_scroll(world: &mut World, x: i32, y:i32) {
+    world.spawn((
+        Position {x, y},
+        Renderable {
+            glyph: rltk::to_cp437('('),
+            fg: Palette::COLOR_4,
+            bg: Palette::MAIN_BG,
+            render: true,
+            order: 2
+        },
+        Name {name: "Magic missile scroll".to_string()},
+        Item {},
+        Consumable {},
+        DealsDamage {damage: 8},
+        Ranged {range:6}
+    ));
+}
+
+fn fireball_scroll(world: &mut World, x: i32, y: i32) {
+    world.spawn((
+        Position {x, y},
+        Renderable {
+            glyph: rltk::to_cp437('*'),
+            fg: Palette::COLOR_4,
+            bg: Palette::MAIN_BG,
+            render: true,
+            order: 2
+        },
+        Name {name: "Fireball scroll".to_string()},
+        Item {},
+        Consumable {},
+        DealsDamage {damage: 20},
+        Ranged {range: 6},
+        AreaOfEffect {radius: 3}
+    ));
+}
+
+fn confusion_scroll(world: &mut World, x: i32, y: i32) {
+    world.spawn((
+        Position {x, y},
+        Renderable {
+            glyph: rltk::to_cp437('&'),
+            fg: Palette::COLOR_4,
+            bg: Palette::MAIN_BG,
+            render: true,
+            order: 2
+        },
+        Name {name: "Confusion scroll".to_string()},
+        Item {},
+        Consumable {},
+        Ranged {range: 6},
+        Confusion {turns: 4}
     ));
 }

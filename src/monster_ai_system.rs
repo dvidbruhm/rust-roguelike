@@ -3,7 +3,7 @@ use resources::Resources;
 use rltk;
 use rltk::{Point};
 use crate::{RunState};
-use crate::components::{Position, Monster, Viewshed, WantsToAttack};
+use crate::components::{Position, Monster, Viewshed, WantsToAttack, Confusion};
 use crate::map::{Map};
 
 
@@ -18,10 +18,18 @@ pub fn monster_ai(world: &mut World, res: &mut Resources) {
     let map: &mut Map = &mut res.get_mut::<Map>().unwrap();
     let ppos: &Point = &res.get::<Point>().unwrap();
 
-    let mut needs_wants_to_attack: Vec<Entity> = vec![];
+    let mut needs_wants_to_attack: Vec<Entity> = Vec::new();
+    let mut to_update_confusion: Vec<(Entity, Confusion)> = Vec::new();
 
     // Monster ai
     for (id, (_mon, pos, vs)) in world.query::<(&Monster, &mut Position, &mut Viewshed)>().iter() {
+        match world.get_mut::<Confusion>(id) {
+            Err(_e) => {},
+            Ok(confusion) => {
+                to_update_confusion.push((id, *confusion));
+                continue;
+            }
+        }
 
         let distance = rltk::DistanceAlg::Pythagoras.distance2d(*ppos, Point::new(pos.x, pos.y));
         if distance < 1.5 {
@@ -48,5 +56,15 @@ pub fn monster_ai(world: &mut World, res: &mut Resources) {
 
     for id in needs_wants_to_attack.iter() {
         let _res = world.insert_one(*id, WantsToAttack {target: *player_id});
+    }
+
+    for (id, _confusion) in to_update_confusion.iter() {
+        let mut to_remove = false;
+        {
+            let mut c = world.get_mut::<Confusion>(*id).unwrap();
+            c.turns -= 1;
+            if c.turns <= 0 { to_remove = true }
+        }
+        if to_remove { world.remove_one::<Confusion>(*id).unwrap(); }
     }
 }

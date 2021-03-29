@@ -12,13 +12,13 @@ mod melee_combat_system;
 mod damage_system;
 mod inventory_system;
 mod drop_item_system;
-mod potion_system;
+mod item_use_system;
 mod rect;
 mod gui;
 mod gamelog;
 mod spawner;
 
-use components::{Position, Renderable, WantsToDrinkPotion, WantsToDropItem};
+use components::{Position, Renderable, WantsToUseItem, WantsToDropItem, Ranged};
 use map::{Map};
 
 
@@ -35,7 +35,14 @@ impl Palette {
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
-pub enum RunState { AwaitingInput, PreRun, PlayerTurn, MonsterTurn, ShowInventory }
+pub enum RunState {
+    AwaitingInput,
+    PreRun,
+    PlayerTurn,
+    MonsterTurn,
+    ShowInventory,
+    ShowTargeting {range: i32, item: Entity}
+}
 
 pub struct State {
     world: World,
@@ -51,7 +58,7 @@ impl State {
         inventory_system::inventory(&mut self.world, &mut self.resources);
         drop_item_system::drop_item(&mut self.world, &mut self.resources);
         damage_system::damage(&mut self.world);
-        potion_system::potion(&mut self.world, &mut self.resources);
+        item_use_system::item_use(&mut self.world, &mut self.resources);
     }
 }
 
@@ -102,10 +109,25 @@ impl GameState for State {
                     gui::ItemMenuResult::NoResponse => {}
                     gui::ItemMenuResult::Cancel => { new_runstate = RunState::AwaitingInput }
                     gui::ItemMenuResult::Selected => {
+                        let mut to_add_wants_use_item: Vec<Entity> = Vec::new();
                         let item_id = result.1.unwrap();
-                        let player_id = self.resources.get::<Entity>().unwrap();
-                        self.world.insert_one(*player_id, WantsToDrinkPotion {potion: item_id}).unwrap();
-                        new_runstate = RunState::PlayerTurn;
+                        {
+                            let player_id = self.resources.get::<Entity>().unwrap();
+                            let is_item_ranged: Result<Ref<'_, Ranged>, ComponentError> = self.world.get::<Ranged>(item_id);
+                            match is_item_ranged {
+                                Ok(is_item_ranged) => {
+                                    new_runstate = RunState::ShowTargeting{range:is_item_ranged.range, item:item_id};
+                                }
+                                Err(_) => {
+                                    to_add_wants_use_item.push(*player_id);
+                                    new_runstate = RunState::PlayerTurn;
+                                }
+                            }
+                        }
+
+                        for id in to_add_wants_use_item.iter() {
+                            self.world.insert_one(*id, WantsToUseItem {item: item_id, target: None}).unwrap();
+                        }
                     }
                     gui::ItemMenuResult::Dropped => {
                         let item_id = result.1.unwrap();
@@ -113,6 +135,19 @@ impl GameState for State {
                         self.world.insert_one(*player_id, WantsToDropItem {item: item_id}).unwrap();
                         new_runstate = RunState::PlayerTurn;
                     }
+                }
+            }
+            RunState::ShowTargeting{range, item} => {
+                let res = gui::ranged_target(&mut self.world, &mut self.resources, ctx, range);
+                match res.0 {
+                    gui::ItemMenuResult::Cancel => new_runstate = RunState::AwaitingInput,
+                    gui::ItemMenuResult::NoResponse => {},
+                    gui::ItemMenuResult::Selected => {
+                        let player_id = self.resources.get::<Entity>().unwrap();
+                        self.world.insert_one(*player_id, WantsToUseItem{item: item, target: res.1}).unwrap();
+                        new_runstate = RunState::PlayerTurn;
+                    },
+                    _ => {}
                 }
             }
         }
@@ -141,6 +176,10 @@ fn main() -> rltk::BError {
 
     // Player
     let player_id = spawner::player(&mut gs.world, player_pos);
+    spawner::random_item(&mut gs.world, &mut gs.resources, player_pos.0, player_pos.1);
+    spawner::random_item(&mut gs.world, &mut gs.resources, player_pos.0+1, player_pos.1);
+    spawner::random_item(&mut gs.world, &mut gs.resources, player_pos.0+1, player_pos.1+1);
+    spawner::random_item(&mut gs.world, &mut gs.resources, player_pos.0, player_pos.1+1);
 
     // Monsters
     for r in map.rooms.iter().skip(1) {

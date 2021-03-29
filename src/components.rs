@@ -67,12 +67,34 @@ pub struct InBackpack {
     pub owner: Entity
 }
 
-pub struct Potion {
+pub struct Consumable {}
+
+#[derive(Clone, Copy)]
+pub struct ProvidesHealing {
     pub heal: i32
 }
 
-pub struct WantsToDrinkPotion {
-    pub potion: Entity
+pub struct Ranged {
+    pub range: i32
+}
+
+#[derive(Clone, Copy)]
+pub struct DealsDamage {
+    pub damage: i32
+}
+
+#[derive(Clone, Copy)]
+pub struct Confusion {
+    pub turns: i32
+}
+
+pub struct AreaOfEffect {
+    pub radius: i32
+}
+
+pub struct WantsToUseItem {
+    pub item: Entity,
+    pub target: Option<rltk::Point>
 }
 
 pub struct TakeDamage {

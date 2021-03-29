@@ -1,8 +1,9 @@
 use rltk::{Rltk, Point, VirtualKeyCode};
 use hecs::*;
 use resources::*;
-use crate::components::{CombatStats, Name, Position, InBackpack};
+use crate::components::{CombatStats, Name, Position, InBackpack, Viewshed};
 use crate::gamelog::{GameLog};
+use crate::map;
 use crate::map::{Map};
 use crate::{Palette};
 
@@ -120,6 +121,7 @@ pub fn show_inventory(world: &mut World, res: &mut Resources, ctx: &mut Rltk) ->
         Some(key) => {
             match key {
                 VirtualKeyCode::I => { (ItemMenuResult::Cancel, None) }
+                VirtualKeyCode::Escape => { (ItemMenuResult::Cancel, None) }
                 VirtualKeyCode::D => { unsafe {DROPPING = !DROPPING;} (ItemMenuResult::NoResponse, None) }
                 _ => {
                     let selection = rltk::letter_to_option(key);
@@ -131,6 +133,51 @@ pub fn show_inventory(world: &mut World, res: &mut Resources, ctx: &mut Rltk) ->
                     }
                     (ItemMenuResult::NoResponse, None)
                 }
+            }
+        }
+    }
+}
+
+pub fn ranged_target(world: &mut World, res: &mut Resources, ctx: &mut Rltk, range: i32) -> (ItemMenuResult, Option<Point>) {
+    let player_id = res.get::<Entity>().unwrap();
+    let player_pos = res.get::<Point>().unwrap();
+    ctx.print_color(5, 12, Palette::COLOR_0, Palette::MAIN_BG, "Select a target");
+
+    let mut valid_cells: Vec<Point> = Vec::new();
+    match world.get::<Viewshed>(*player_id) {
+        Err(_e) => {return (ItemMenuResult::Cancel, None)},
+        Ok(player_vs) => {
+            for pt in player_vs.visible_tiles.iter() {
+                let dist = rltk::DistanceAlg::Pythagoras.distance2d(*player_pos, *pt);
+                if dist as i32 <= range {
+                    ctx.set_bg(pt.x + map::OFFSET_X as i32, pt.y + map::OFFSET_Y as i32, Palette::COLOR_4);
+                    valid_cells.push(*pt);
+                }
+            }
+        }
+    }
+
+    let mouse_pos = ctx.mouse_pos();
+    let map_mouse_pos = (mouse_pos.0 - map::OFFSET_X as i32, mouse_pos.1 - map::OFFSET_Y as i32);
+    let mut valid_target = false;
+    for pt in valid_cells.iter() {
+        if pt.x == map_mouse_pos.0 && pt.y == map_mouse_pos.1 { valid_target = true }
+    }
+    if valid_target {
+        ctx.set_bg(mouse_pos.0, mouse_pos.1, Palette::COLOR_2);
+        if ctx.left_click { return (ItemMenuResult::Selected, Some(Point::new(map_mouse_pos.0, map_mouse_pos.1))) }
+    }
+    else {
+        ctx.set_bg(mouse_pos.0, mouse_pos.1, Palette::COLOR_1);
+        if ctx.left_click { return (ItemMenuResult::Cancel, None) }
+    }
+
+    match ctx.key {
+        None => (ItemMenuResult::NoResponse, None),
+        Some(key) => {
+            match key {
+                VirtualKeyCode::Escape => { return (ItemMenuResult::Cancel, None) },
+                _ => (ItemMenuResult::NoResponse, None)
             }
         }
     }
