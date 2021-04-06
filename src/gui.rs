@@ -1,3 +1,5 @@
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::convert::TryFrom;
 use rltk::{Rltk, Point, VirtualKeyCode};
 use hecs::*;
 use resources::*;
@@ -5,7 +7,16 @@ use crate::components::{CombatStats, Name, Position, InBackpack, Viewshed};
 use crate::gamelog::{GameLog};
 use crate::map;
 use crate::map::{Map};
-use crate::{Palette};
+use crate::{Palette, RunState};
+
+#[derive(PartialEq, Copy, Clone)]
+pub enum ItemMenuResult {Cancel, NoResponse, Selected, Dropped}
+
+#[derive(PartialEq, Eq, Clone, Copy, TryFromPrimitive, IntoPrimitive)]
+#[repr(i8)]
+pub enum MainMenuSelection {NewGame, LoadGame, Exit}
+
+pub enum MainMenuResult {NoSelection {selected: MainMenuSelection}, Selection {selected: MainMenuSelection}}
 
 pub fn draw_gui(world: &World, res: &Resources, ctx: &mut Rltk) {
     ctx.print_color(0, 10, Palette::MAIN_FG, Palette::MAIN_BG, "─".repeat(80));
@@ -13,7 +24,9 @@ pub fn draw_gui(world: &World, res: &Resources, ctx: &mut Rltk) {
     let player_id: &Entity = &res.get::<Entity>().unwrap();
     let player_stats = world.get::<CombatStats>(*player_id).unwrap();
     let hp_gui = format!("{} / {} HP", player_stats.hp, player_stats.max_hp);
+    let map = res.get::<Map>().unwrap();
 
+    ctx.print_color(62, 9, Palette::MAIN_FG, Palette::MAIN_BG, format!("Depth: {}", map.depth));
     ctx.print_color(62, 1, Palette::MAIN_FG, Palette::MAIN_BG, hp_gui);
 
     for y in 0..10 {
@@ -63,30 +76,24 @@ pub fn draw_tooltips(world: &World, res: &Resources, ctx: &mut Rltk) {
 
         let mut sign = 1;
         let mut arrow_pos = Point::new(mouse_pos.0 + 1, mouse_pos.1);
-        let mut padding_x = arrow_pos.x + 1;
         let mut left_x = mouse_pos.0 + 4;
         let mut y = mouse_pos.1;
         if mouse_pos.0 > map.width / 2 {
             sign = -1;
             arrow_pos = Point::new(mouse_pos.0 - 2, mouse_pos.1);
-            padding_x = arrow_pos.x;
             left_x = mouse_pos.0 - width;
         }
 
+        if sign == -1 {ctx.fill_region(rltk::Rect{x1: left_x, x2: left_x - 3 + width, y1: y, y2: y + tooltip.len() as i32 - 1}, rltk::to_cp437(' '), Palette::MAIN_FG, Palette::COLOR_3);}
+        else {ctx.fill_region(rltk::Rect{x1: left_x - 1, x2: left_x + width - 4, y1: y, y2: y + tooltip.len() as i32 - 1}, rltk::to_cp437(' '), Palette::MAIN_FG, Palette::COLOR_3);}
+
         for s in tooltip.iter() {
-            ctx.print_color(left_x, y, Palette::MAIN_FG, Palette::MAIN_BG, s);
-            let padding = (width - s.len() as i32) - 1;
-            for i in 0..padding {
-                ctx.print_color(padding_x + sign * i, y, Palette::MAIN_FG, Palette::MAIN_BG, " ");
-            }
+            ctx.print_color(left_x, y, Palette::MAIN_FG, Palette::COLOR_3, s);
             y += 1;
         }
-        ctx.print_color(arrow_pos.x, arrow_pos.y, Palette::MAIN_FG, Palette::MAIN_BG, "->");
+        ctx.print_color(arrow_pos.x, arrow_pos.y, Palette::MAIN_FG, Palette::COLOR_3, "->");
     }
 }
-
-#[derive(PartialEq)]
-pub enum ItemMenuResult {Cancel, NoResponse, Selected, Dropped}
 
 pub fn show_inventory(world: &mut World, res: &mut Resources, ctx: &mut Rltk) -> (ItemMenuResult, Option<Entity>) {
     let player_id = res.get::<Entity>().unwrap();
@@ -181,4 +188,46 @@ pub fn ranged_target(world: &mut World, res: &mut Resources, ctx: &mut Rltk, ran
             }
         }
     }
+}
+
+pub fn main_menu(_world: &mut World, res: &mut Resources, ctx: &mut Rltk) -> MainMenuResult {
+    let runstate = res.get::<RunState>().unwrap();
+
+    let get_fg = |sel, menu_item| {
+        if sel == menu_item { return Palette::COLOR_1 }
+        else { return Palette::MAIN_FG }
+    };
+
+    ctx.print_color_centered(15, Palette::COLOR_2, Palette::MAIN_BG, "Roguelike");
+
+    if let RunState::MainMenu{menu_selection: selection} = *runstate {
+        ctx.print_color_centered(25, get_fg(selection, MainMenuSelection::NewGame), Palette::MAIN_BG, "Begin new adventure");
+        ctx.print_color_centered(30, get_fg(selection, MainMenuSelection::LoadGame), Palette::MAIN_BG, "Load game");
+        ctx.print_color_centered(35, get_fg(selection, MainMenuSelection::Exit), Palette::MAIN_BG, "Exit");
+
+        match ctx.key {
+            None => {return MainMenuResult::NoSelection{selected: selection}}
+            Some(key) => {
+                match key{
+                    VirtualKeyCode::Escape => {return MainMenuResult::Selection{selected: MainMenuSelection::Exit}}
+                    VirtualKeyCode::Up => {
+                        let sel: i8 = selection.into();
+                        // TODO: use len of menu selections instead of hard coded 3
+                        let new_sel = MainMenuSelection::try_from((sel - 1i8).rem_euclid(3)).unwrap();
+                        return MainMenuResult::NoSelection{selected: new_sel}
+                    }
+                    VirtualKeyCode::Down => {
+                        let sel: i8 = selection.into();
+                        // TODO: use len of menu selections instead of hard coded 3
+                        let new_sel = MainMenuSelection::try_from((sel + 1i8).rem_euclid(3)).unwrap();
+                        return MainMenuResult::NoSelection{selected: new_sel}
+                    }
+                    VirtualKeyCode:: Return => {return MainMenuResult::Selection{selected: selection}}
+                    _ => {return MainMenuResult::NoSelection{selected: selection}}
+                }
+            }
+        }
+    }
+
+    MainMenuResult::NoSelection{selected: MainMenuSelection::NewGame}
 }

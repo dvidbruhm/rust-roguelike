@@ -1,4 +1,4 @@
-use rltk::{Rltk, GameState, RltkBuilder};
+use rltk::{Rltk, GameState, RltkBuilder, Point};
 use hecs::*;
 use resources::Resources;
 
@@ -18,9 +18,9 @@ mod gui;
 mod gamelog;
 mod spawner;
 
-use components::{Position, Renderable, WantsToUseItem, WantsToDropItem, Ranged};
+use components::{Position, Renderable, WantsToUseItem, WantsToDropItem, Ranged, InBackpack, Player, Viewshed};
 use map::{Map};
-
+use gamelog::{GameLog};
 
 pub struct Palette;
 impl Palette {
@@ -34,14 +34,17 @@ impl Palette {
     const COLOR_4: rltk::RGB = rltk::RGB{r: 0.7, g:0.7, b:0.};
 }
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum RunState {
     AwaitingInput,
     PreRun,
     PlayerTurn,
     MonsterTurn,
     ShowInventory,
-    ShowTargeting {range: i32, item: Entity}
+    ShowTargeting {range: i32, item: Entity},
+    MainMenu {menu_selection: gui::MainMenuSelection},
+    SaveGame,
+    NextLevel
 }
 
 pub struct State {
@@ -60,32 +63,90 @@ impl State {
         damage_system::damage(&mut self.world);
         item_use_system::item_use(&mut self.world, &mut self.resources);
     }
+
+    fn entities_to_delete_on_level_change(&mut self) -> Vec<Entity> {
+        let mut ids_to_delete: Vec<Entity> = Vec::new();
+        let all_entities: Vec<Entity> = self.world.iter().map(|(id, _)| id).collect();
+
+        let player_id = self.resources.get::<Entity>().unwrap();
+
+        for id in all_entities {
+            let mut to_delete = true;
+            if let Ok(_p) =  self.world.get::<Player>(id) { to_delete = false; }
+            
+            if let Ok(backpack) = self.world.get::<InBackpack>(id) {
+                if backpack.owner == *player_id { to_delete = false; }
+            }
+
+            if to_delete { ids_to_delete.push(id); }
+        }
+
+        ids_to_delete
+    }
+
+    fn next_level(&mut self) {
+        let ids_to_delete = self.entities_to_delete_on_level_change();
+        for id in ids_to_delete {
+            self.world.despawn(id).unwrap();
+        }
+
+        let map_copy;
+        {
+            let mut map = self.resources.get_mut::<Map>().unwrap();
+            let depth = map.depth + 1;
+            *map = Map::new_map_rooms_corridors(10, 3, 8, depth);
+            map_copy = map.clone();
+        }
+
+        for room in map_copy.rooms.iter() {
+            spawner::fill_room(&mut self.world, &mut self.resources, room);
+        }
+
+        let player_id = self.resources.get::<Entity>().unwrap();
+        let (player_x, player_y) = map_copy.rooms[0].center();
+        let mut player_pos = self.resources.get_mut::<Point>().unwrap();
+        *player_pos = Point::new(player_x, player_y);
+        let mut player_pos_comp = self.world.get_mut::<Position>(*player_id).unwrap();
+        player_pos_comp.x = player_x;
+        player_pos_comp.y = player_y;
+
+        let player_vs = self.world.get_mut::<Viewshed>(*player_id);
+        if let Ok(mut vs) = player_vs { vs.dirty = true; }
+
+        let mut log = self.resources.get_mut::<GameLog>().unwrap();
+        log.messages.push("You descend in the staircase".to_string());
+    }
 }
 
 impl GameState for State {
     fn tick(&mut self, ctx: &mut Rltk) {
         ctx.cls();
 
-        map::draw_map(&self, ctx);
+        let mut new_runstate: RunState = *self.resources.get::<RunState>().unwrap();
 
-        {
-            let map = self.resources.get::<Map>().unwrap();
+        match new_runstate {
+            RunState::MainMenu{..} => {}
+            _ => {
+                map::draw_map(&self, ctx);
 
-            let mut query = self.world.query::<(&Position, &Renderable)>();
-            let mut to_render = query.iter().collect::<Vec<_>>();
-            to_render.sort_by_key(|a| -a.1.1.order);
+                {
+                    let map = self.resources.get::<Map>().unwrap();
 
-            for (_id, (pos, render)) in to_render {
-                let idx = map.xy_idx(pos.x, pos.y);
-                if render.render && map.visible_tiles[idx] {
-                    ctx.set(pos.x + map::OFFSET_X as i32, pos.y + map::OFFSET_Y as i32, render.fg, render.bg, render.glyph);
+                    let mut query = self.world.query::<(&Position, &Renderable)>();
+                    let mut to_render = query.iter().collect::<Vec<_>>();
+                    to_render.sort_by_key(|a| -a.1.1.order);
+
+                    for (_id, (pos, render)) in to_render {
+                        let idx = map.xy_idx(pos.x, pos.y);
+                        if render.render && map.visible_tiles[idx] {
+                            ctx.set(pos.x + map::OFFSET_X as i32, pos.y + map::OFFSET_Y as i32, render.fg, render.bg, render.glyph);
+                        }
+                    }
+
+                    gui::draw_gui(&self.world, &self.resources, ctx);
                 }
             }
-
-            gui::draw_gui(&self.world, &self.resources, ctx);
         }
-
-        let mut new_runstate: RunState = *self.resources.get::<RunState>().unwrap();
 
         match new_runstate {
             RunState::PreRun => {
@@ -150,6 +211,40 @@ impl GameState for State {
                     _ => {}
                 }
             }
+            RunState::MainMenu{..} => {
+                let result = gui::main_menu(&mut self.world, &mut self.resources, ctx);
+                match result {
+                    gui::MainMenuResult::NoSelection{selected} => {new_runstate = RunState::MainMenu{menu_selection: selected}}
+                    gui::MainMenuResult::Selection{selected} => {
+                        match selected {
+                            gui::MainMenuSelection::NewGame => {new_runstate = RunState::PreRun}
+                            gui::MainMenuSelection::LoadGame => {new_runstate = RunState::PreRun}
+                            gui::MainMenuSelection::Exit => {::std::process::exit(0)}
+                        }
+                    }
+                }
+            }
+            RunState::SaveGame => {
+                /*
+                let data = serde_json::to_string(&*self.resources.get::<Map>().unwrap()).unwrap();
+                println!("{}", data);
+    
+                let c: Context;
+                let mut writer = Vec::with_capacity(128);
+                let s = serde_json::Serializer::new(writer);
+                hecs::serialize::row::serialize(&self.world, &mut c, s);
+
+                for (id, _s) in self.world.query_mut::<&SerializeMe>() {
+                    println!("{:?}", id);
+                }
+                */
+                println!("Saving game... TODO");
+                new_runstate = RunState::MainMenu{menu_selection: gui::MainMenuSelection::LoadGame};
+            }
+            RunState::NextLevel => {
+                self.next_level();
+                new_runstate = RunState::PreRun;
+            }
         }
 
         self.resources.insert::<RunState>(new_runstate).unwrap();
@@ -170,7 +265,7 @@ fn main() -> rltk::BError {
         resources: Resources::default()
     };
 
-    let map: Map = Map::new_map_rooms_corridors(30, 4, 15);
+    let map: Map = Map::new_map_rooms_corridors(10, 3, 8, 1);
     let player_pos = map.rooms[0].center();
     gs.resources.insert(rltk::RandomNumberGenerator::new());
 
@@ -189,7 +284,7 @@ fn main() -> rltk::BError {
     gs.resources.insert(map);
     gs.resources.insert(rltk::Point::new(player_pos.0, player_pos.1));
     gs.resources.insert(player_id);
-    gs.resources.insert(RunState::PreRun);
+    gs.resources.insert(RunState::MainMenu{menu_selection: gui::MainMenuSelection::NewGame});
     gs.resources.insert(gamelog::GameLog{messages: vec!["Welcome to the roguelike!".to_string()]});
 
     rltk::main_loop(context, gs)

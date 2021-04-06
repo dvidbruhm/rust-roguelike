@@ -80,7 +80,7 @@ pub fn item_use(world: &mut World, res: &mut Resources) {
                     if id == *player_id {
                         let monster_name = world.get::<Name>(*monster).unwrap();
                         let item_name = world.get::<Name>(use_item.item).unwrap();
-                        log.messages.push(format!("You use {} on {}, dealing {} hp", monster_name.name, item_name.name, dd.damage));
+                        log.messages.push(format!("You use {} on {}, dealing {} hp", item_name.name, monster_name.name, dd.damage));
                     }
                     used_item = true;
                 }

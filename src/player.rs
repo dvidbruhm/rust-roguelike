@@ -4,7 +4,7 @@ use hecs::*;
 use resources::*;
 
 use crate::{State, RunState};
-use crate::map::{Map};
+use crate::map::{Map, TileType};
 use crate::components::{Position, Player, Viewshed, CombatStats, WantsToAttack, Item, WantsToPickupItem};
 use crate::gamelog::{GameLog};
 
@@ -67,6 +67,20 @@ pub fn get_item(world: &mut World, res: &mut Resources){
     }
 }
 
+fn try_next_level(_world: &mut World, res: &mut Resources) -> bool {
+    let player_pos = res.get::<Point>().unwrap();
+    let map = res.get::<Map>().unwrap();
+    let player_idx = map.xy_idx(player_pos.x, player_pos.y);
+    if map.tiles[player_idx] == TileType::StairsDown {
+        true
+    }
+    else {
+        let mut log = res.get_mut::<GameLog>().unwrap();
+        log.messages.push(format!("There is no stairs down here"));
+        false
+    }
+}
+
 pub fn player_input(gs: &mut State, ctx: &mut Rltk) -> RunState {
     match ctx.key {
         None => { return RunState::AwaitingInput }
@@ -81,6 +95,10 @@ pub fn player_input(gs: &mut State, ctx: &mut Rltk) -> RunState {
             VirtualKeyCode::B => try_move_player(-1, 1, gs),
             VirtualKeyCode::G => get_item(&mut gs.world, &mut gs.resources),
             VirtualKeyCode::I => return RunState::ShowInventory,
+            VirtualKeyCode::Escape => return RunState::SaveGame,
+            VirtualKeyCode::Period => {
+                if try_next_level(&mut gs.world, &mut gs.resources) { return RunState::NextLevel; }
+            }
             _ => { return RunState::AwaitingInput }
         }
     }

@@ -1,4 +1,6 @@
 use std::cmp as cmp;
+use serde;
+use serde::{Serialize, Deserialize};
 use hecs::*;
 use rltk;
 use rltk::{RandomNumberGenerator, Rltk, Algorithm2D, BaseMap, Point};
@@ -12,19 +14,24 @@ pub const MAPCOUNT: usize = MAPWIDTH * MAPHEIGHT;
 pub const OFFSET_X: usize = 0;
 pub const OFFSET_Y: usize = 11;
 
-#[derive(PartialEq, Copy, Clone, Debug)]
+#[derive(PartialEq, Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum TileType {
-    Wall, Floor
+    Wall, Floor, StairsDown, StairsUp
 }
 
+#[derive(Default, Serialize, Deserialize, Clone)]
 pub struct Map {
-    pub tiles : Vec<TileType>,
-    pub rooms : Vec<Rect>,
-    pub width : i32,
-    pub height : i32,
-    pub revealed_tiles : Vec<bool>,
-    pub visible_tiles : Vec<bool>,
-    pub blocked : Vec<bool>,
+    pub tiles: Vec<TileType>,
+    pub rooms: Vec<Rect>,
+    pub width: i32,
+    pub height: i32,
+    pub revealed_tiles: Vec<bool>,
+    pub visible_tiles: Vec<bool>,
+    pub blocked: Vec<bool>,
+    pub depth: i32,
+
+    #[serde(skip_serializing)]
+    #[serde(skip_deserializing)]
     pub tile_content : Vec<Vec<Entity>>
 }
 
@@ -88,7 +95,7 @@ impl Map {
         }
     }
 
-    pub fn new_map_rooms_corridors(max_rooms: i32, min_size: i32, max_size: i32) -> Map {
+    pub fn new_map_rooms_corridors(max_rooms: i32, min_size: i32, max_size: i32, new_depth: i32) -> Map {
         let mut map = Map {
             tiles: vec![TileType::Wall; MAPCOUNT],
             rooms: Vec::new(),
@@ -97,7 +104,8 @@ impl Map {
             revealed_tiles: vec![false; MAPCOUNT],
             visible_tiles: vec![false; MAPCOUNT],
             blocked: vec![false; MAPCOUNT],
-            tile_content: vec![Vec::new(); MAPCOUNT]
+            tile_content: vec![Vec::new(); MAPCOUNT],
+            depth: new_depth
         };
         let mut rng = RandomNumberGenerator::new();
 
@@ -131,6 +139,10 @@ impl Map {
             map.apply_vertical_corridor(x1, y1, y2);
             map.apply_horizontal_corridor(x1, x2, y2);
         }
+
+        let stairs_down_pos = map.rooms[map.rooms.len() - 1].center();
+        let stairs_idx = map.xy_idx(stairs_down_pos.0, stairs_down_pos.1);
+        map.tiles[stairs_idx] = TileType::StairsDown;
 
         map
     }
@@ -193,6 +205,16 @@ pub fn draw_map(gs: &State, ctx : &mut Rltk) {
                     fg = Palette::MAIN_FG;
                     bg = Palette::MAIN_BG;
                     glyph = rltk::to_cp437('▓');
+                }
+                TileType::StairsDown => {
+                    fg = Palette::MAIN_FG;
+                    bg = Palette::MAIN_BG;
+                    glyph = rltk::to_cp437('>');
+                }
+                TileType::StairsUp => {
+                    fg = Palette::MAIN_FG;
+                    bg = Palette::MAIN_BG;
+                    glyph = rltk::to_cp437('<');
                 }
             }
             if !map.visible_tiles[idx] {

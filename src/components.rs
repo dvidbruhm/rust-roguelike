@@ -1,7 +1,8 @@
+use serde::{Serialize, Deserialize};
 use hecs::*;
 use rltk;
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Position {
     pub x: i32,
     pub y: i32,
@@ -122,3 +123,5 @@ impl TakeDamage {
         }
     }
 }
+
+pub struct SerializeMe {}

@@ -1,7 +1,7 @@
 use hecs::*;
 use resources::*;
 use rltk::{RandomNumberGenerator};
-use crate::components::{Position, Renderable, Player, Viewshed, Name, CombatStats, BlocksTile, Monster, Item, Consumable, ProvidesHealing, DealsDamage, Ranged, AreaOfEffect, Confusion};
+use crate::components::{Position, Renderable, Player, Viewshed, Name, CombatStats, BlocksTile, Monster, Item, Consumable, ProvidesHealing, DealsDamage, Ranged, AreaOfEffect, Confusion, SerializeMe};
 use crate::{Palette};
 use crate::rect::{Rect};
 
@@ -11,6 +11,7 @@ const MAX_ITEMS: i32 = 2;
 
 pub fn player(world: &mut World, pos: (i32, i32)) -> Entity {
     world.spawn((
+        SerializeMe {},
         Position {x: pos.0, y: pos.1},
         Renderable {
             glyph: rltk::to_cp437('ô'),
