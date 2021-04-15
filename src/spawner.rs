@@ -1,12 +1,14 @@
+use std::collections::HashMap;
+
 use hecs::*;
 use resources::*;
-use rltk::{RandomNumberGenerator};
+use rltk::RandomNumberGenerator;
 use crate::components::{Position, Renderable, Player, Viewshed, Name, CombatStats, BlocksTile, Monster, Item, Consumable, ProvidesHealing, DealsDamage, Ranged, AreaOfEffect, Confusion, SerializeMe};
-use crate::{Palette};
-use crate::rect::{Rect};
+use crate::Palette;
+use crate::rect::Rect;
+use crate::weighted_table::WeightedTable;
 
-const MAX_MONSTERS: i32 = 4;
-const MAX_ITEMS: i32 = 2;
+const MAX_SPAWNS: i32 = 4;
 
 
 pub fn player(world: &mut World, pos: (i32, i32)) -> Entity {
@@ -27,68 +29,51 @@ pub fn player(world: &mut World, pos: (i32, i32)) -> Entity {
             dirty: true
         },
         Name {name: "Blabinou".to_string()},
-        CombatStats {max_hp: 30, hp: 30, defense: 2, power: 5}
+        CombatStats {max_hp: 30, hp: 30, defense: 2, power: 5, regen_rate: 1}
     ))
 }
 
-pub fn random_monster(world: &mut World, res: &mut Resources, x: i32, y: i32) {
-    let rng = &mut res.get_mut::<RandomNumberGenerator>().unwrap();
-    let roll = rng.range(0, 2);
-    match roll {
-        0 => { orc(world, x, y); }
-        _ => { goblin(world, x, y); }
-    }
+pub fn room_table(depth: i32) -> WeightedTable {
+    WeightedTable::new()
+        .add("Goblin", 10)
+        .add("Orc", 1 + depth)
+        .add("Health Potion", 7)
+        .add("Fireball Scroll", 2 + depth)
+        .add("Confusion Scroll", 2 + depth)
+        .add("Magic Missile Scroll", 4)
 }
 
-pub fn random_item(world: &mut World, res: &mut Resources, x:i32, y:i32) {
-    let rng = &mut res.get_mut::<RandomNumberGenerator>().unwrap();
-    let roll = rng.range(0, 4);
-    match roll {
-        0 => { health_potion(world, x, y); }
-        1 => { fireball_scroll(world, x, y); }
-        2 => { confusion_scroll(world, x, y); }
-        _ => { magic_missile_scroll(world, x, y); }
-    }
-}
-
-pub fn fill_room(world: &mut World, res: &mut Resources, room: &Rect) {
-    let mut monster_spawn_points: Vec<(i32, i32)> = Vec::new();
-    let mut item_spawn_points: Vec<(i32, i32)> = Vec::new();
+pub fn fill_room(world: &mut World, res: &mut Resources, room: &Rect, depth: i32) {
+    let spawn_table = &room_table(depth);
+    let mut spawn_points: HashMap<(i32, i32), String> = HashMap::new();
     {
-        let rng = &mut res.get_mut::<RandomNumberGenerator>().unwrap();
-        let nb_monsters = rng.range(0, MAX_MONSTERS + 1);
-        let nb_items = rng.range(0, MAX_ITEMS + 1);
+        let mut rng = &mut res.get_mut::<RandomNumberGenerator>().unwrap();
+        let nb_spawns = rng.range(-2, MAX_SPAWNS + depth);
 
-        for _i in 0..nb_monsters {
+        for _i in 0..nb_spawns {
             let mut added = false;
             while !added {
                 let x = rng.range(room.x1, room.x1 + room.width());
                 let y = rng.range(room.y1, room.y1 + room.height());
-                if !monster_spawn_points.contains(&(x, y)) {
-                    monster_spawn_points.push((x, y));
-                    added = true;
-                }
-            }
-        }
-
-        for _i in 0..nb_items {
-            let mut added = false;
-            while !added {
-                let x = rng.range(room.x1, room.x1 + room.width());
-                let y = rng.range(room.y1, room.y1 + room.height());
-                if !item_spawn_points.contains(&(x, y)) {
-                    item_spawn_points.push((x, y));
+                if !spawn_points.contains_key(&(x, y)) {
+                    spawn_points.insert((x, y), spawn_table.roll(&mut rng).unwrap());
                     added = true;
                 }
             }
         }
     }
 
-    for (x, y) in monster_spawn_points.iter() {
-        random_monster(world, res, *x, *y);
-    }
-    for (x, y) in item_spawn_points.iter() {
-        random_item(world, res, *x, *y);
+    for spawn in spawn_points.iter() {
+        let (x, y) = *spawn.0;
+        match spawn.1.as_ref() {
+            "Goblin" => goblin(world, x, y),
+            "Orc" => orc(world, x, y),
+            "Health Potion" => health_potion(world, x, y),
+            "Fireball Scroll" => fireball_scroll(world, x, y),
+            "Confusion Scroll" => confusion_scroll(world, x, y),
+            "Magic Missile Scroll" => magic_missile_scroll(world, x, y),
+            _ => {}
+        }
     }
 }
 
@@ -104,7 +89,7 @@ fn monster(world: &mut World, x: i32, y: i32, glyph: rltk::FontCharType, name: S
     world.spawn((
         Position {x, y},
         Renderable {
-            glyph: glyph,
+            glyph,
             fg: Palette::COLOR_1,
             bg: Palette::MAIN_BG,
             render: true,
@@ -116,9 +101,9 @@ fn monster(world: &mut World, x: i32, y: i32, glyph: rltk::FontCharType, name: S
             dirty: true
         },
         Monster {},
-        Name {name: name},
+        Name {name},
         BlocksTile {},
-        CombatStats {max_hp: 8, hp: 8, defense: 1, power: 4}
+        CombatStats {max_hp: 8, hp: 8, defense: 1, power: 4, regen_rate: 0}
     ));
 }
 

@@ -1,8 +1,8 @@
 use hecs::*;
 use resources::*;
-use crate::gamelog::{GameLog};
+use crate::gamelog::GameLog;
 use crate::components::{WantsToUseItem, CombatStats, ProvidesHealing, Name, Consumable, DealsDamage, TakeDamage, AreaOfEffect, Confusion};
-use crate::map::{Map};
+use crate::map::Map;
 
 pub fn item_use(world: &mut World, res: &mut Resources) {
     let mut log = res.get_mut::<GameLog>().unwrap();
@@ -98,7 +98,7 @@ pub fn item_use(world: &mut World, res: &mut Resources) {
                     if id == *player_id {
                         let monster_name = world.get::<Name>(*monster).unwrap();
                         let item_name = world.get::<Name>(use_item.item).unwrap();
-                        log.messages.push(format!("You use {} on {}, confusing them", monster_name.name, item_name.name));
+                        log.messages.push(format!("You use {} on {}, confusing them", item_name.name, monster_name.name));
                     }
                     used_item = true;
                 }

@@ -6,7 +6,7 @@ use resources::*;
 use crate::{State, RunState};
 use crate::map::{Map, TileType};
 use crate::components::{Position, Player, Viewshed, CombatStats, WantsToAttack, Item, WantsToPickupItem};
-use crate::gamelog::{GameLog};
+use crate::gamelog::GameLog;
 
 pub fn try_move_player(dx: i32, dy: i32, gs: &mut State) {
     let map = gs.resources.get::<Map>().unwrap();
@@ -61,7 +61,7 @@ pub fn get_item(world: &mut World, res: &mut Resources){
         Some(item) => {
             let _res = world.insert_one(*player_id, WantsToPickupItem {
                 collected_by: *player_id,
-                item: item
+                item
             });
         }
     }
@@ -81,6 +81,13 @@ fn try_next_level(_world: &mut World, res: &mut Resources) -> bool {
     }
 }
 
+fn skip_turn(world: &mut World, res: &mut Resources) -> RunState {
+    let player_id = res.get::<Entity>().unwrap();
+    let mut stats = world.get_mut::<CombatStats>(*player_id).unwrap();
+    stats.hp = i32::min(stats.hp + stats.regen_rate, stats.max_hp);
+    RunState::PlayerTurn
+}
+
 pub fn player_input(gs: &mut State, ctx: &mut Rltk) -> RunState {
     match ctx.key {
         None => { return RunState::AwaitingInput }
@@ -95,6 +102,7 @@ pub fn player_input(gs: &mut State, ctx: &mut Rltk) -> RunState {
             VirtualKeyCode::B => try_move_player(-1, 1, gs),
             VirtualKeyCode::G => get_item(&mut gs.world, &mut gs.resources),
             VirtualKeyCode::I => return RunState::ShowInventory,
+            VirtualKeyCode::W => return skip_turn(&mut gs.world, &mut gs.resources),
             VirtualKeyCode::Escape => return RunState::SaveGame,
             VirtualKeyCode::Period => {
                 if try_next_level(&mut gs.world, &mut gs.resources) { return RunState::NextLevel; }

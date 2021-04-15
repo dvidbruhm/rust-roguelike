@@ -17,10 +17,11 @@ mod rect;
 mod gui;
 mod gamelog;
 mod spawner;
+mod weighted_table;
 
 use components::{Position, Renderable, WantsToUseItem, WantsToDropItem, Ranged, InBackpack, Player, Viewshed};
-use map::{Map};
-use gamelog::{GameLog};
+use map::Map;
+use gamelog::GameLog;
 
 pub struct Palette;
 impl Palette {
@@ -91,15 +92,16 @@ impl State {
         }
 
         let map_copy;
+        let current_depth;
         {
             let mut map = self.resources.get_mut::<Map>().unwrap();
-            let depth = map.depth + 1;
-            *map = Map::new_map_rooms_corridors(10, 3, 8, depth);
+            current_depth = map.depth;
+            *map = Map::new_map_rooms_corridors(10, 3, 8, current_depth + 1);
             map_copy = map.clone();
         }
 
         for room in map_copy.rooms.iter() {
-            spawner::fill_room(&mut self.world, &mut self.resources, room);
+            spawner::fill_room(&mut self.world, &mut self.resources, room, current_depth + 1);
         }
 
         let player_id = self.resources.get::<Entity>().unwrap();
@@ -205,7 +207,7 @@ impl GameState for State {
                     gui::ItemMenuResult::NoResponse => {},
                     gui::ItemMenuResult::Selected => {
                         let player_id = self.resources.get::<Entity>().unwrap();
-                        self.world.insert_one(*player_id, WantsToUseItem{item: item, target: res.1}).unwrap();
+                        self.world.insert_one(*player_id, WantsToUseItem{item, target: res.1}).unwrap();
                         new_runstate = RunState::PlayerTurn;
                     },
                     _ => {}
@@ -265,20 +267,16 @@ fn main() -> rltk::BError {
         resources: Resources::default()
     };
 
-    let map: Map = Map::new_map_rooms_corridors(10, 3, 8, 1);
+    let map: Map = Map::new_map_rooms_corridors(10, 4, 8, 1);
     let player_pos = map.rooms[0].center();
     gs.resources.insert(rltk::RandomNumberGenerator::new());
 
     // Player
     let player_id = spawner::player(&mut gs.world, player_pos);
-    spawner::random_item(&mut gs.world, &mut gs.resources, player_pos.0, player_pos.1);
-    spawner::random_item(&mut gs.world, &mut gs.resources, player_pos.0+1, player_pos.1);
-    spawner::random_item(&mut gs.world, &mut gs.resources, player_pos.0+1, player_pos.1+1);
-    spawner::random_item(&mut gs.world, &mut gs.resources, player_pos.0, player_pos.1+1);
 
-    // Monsters
+    // Monsters and items
     for r in map.rooms.iter().skip(1) {
-        spawner::fill_room(&mut gs.world, &mut gs.resources, r);
+        spawner::fill_room(&mut gs.world, &mut gs.resources, r, 1);
     }
 
     gs.resources.insert(map);
