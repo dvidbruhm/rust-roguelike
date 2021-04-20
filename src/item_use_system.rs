@@ -1,7 +1,7 @@
 use hecs::*;
 use resources::*;
 use crate::gamelog::GameLog;
-use crate::components::{WantsToUseItem, CombatStats, ProvidesHealing, Name, Consumable, DealsDamage, TakeDamage, AreaOfEffect, Confusion};
+use crate::components::{WantsToUseItem, CombatStats, ProvidesHealing, Name, Consumable, DealsDamage, TakeDamage, AreaOfEffect, Confusion, Equippable, Equipped, InBackpack};
 use crate::map::Map;
 
 pub fn item_use(world: &mut World, res: &mut Resources) {
@@ -13,6 +13,8 @@ pub fn item_use(world: &mut World, res: &mut Resources) {
     let mut to_add_take_damage: Vec<(Entity, DealsDamage)> = Vec::new();
     let mut to_heal: Vec<(Entity, ProvidesHealing)> = Vec::new();
     let mut to_add_confusion: Vec<(Entity, Confusion)> = Vec::new();
+    let mut to_unequip: Vec<(Entity, Name, Entity)> = Vec::new();
+    let mut to_equip: Vec<(Entity, Equippable, Name, Entity)> = Vec::new();
 
     for (id, use_item) in &mut world.query::<&WantsToUseItem>().iter() {
         let mut used_item = true;
@@ -115,26 +117,62 @@ pub fn item_use(world: &mut World, res: &mut Resources) {
                 }
             }
         }
+
+        // Equip if item is equippable
+        let equippable = world.get::<Equippable>(use_item.item);
+        match equippable {
+            Err(_e) => {}
+            Ok(equippable) => {
+                let target = targets[0];
+                
+                // Unequip already equipped item
+                for (id, (equipped, name)) in world.query::<(&Equipped, &Name)>().iter() {
+                    if equipped.owner == target && equipped.slot == equippable.slot {
+                        to_unequip.push((id, name.clone(), target));
+                    }
+                }
+
+                // Actually equip item
+                let item_name = (*world.get::<Name>(use_item.item).unwrap()).clone();
+                to_equip.push((use_item.item, *equippable, item_name, target));
+            }
+        }
     }
 
-    for id in to_remove.iter() {
-        world.despawn(*id).unwrap();
+    for id in to_remove {
+        world.despawn(id).unwrap();
     }
 
-    for id in to_remove_wants_use.iter() {
-        world.remove_one::<WantsToUseItem>(*id).unwrap();
+    for id in to_remove_wants_use {
+        world.remove_one::<WantsToUseItem>(id).unwrap();
     }
 
-    for (id, deals_damage) in to_add_take_damage.iter() {
-        TakeDamage::add_damage(world, *id, deals_damage.damage);
+    for (id, deals_damage) in to_add_take_damage {
+        TakeDamage::add_damage(world, id, deals_damage.damage);
     }
 
-    for (id, heals) in to_heal.iter() {
-        let mut stats = world.get_mut::<CombatStats>(*id).unwrap();
+    for (id, heals) in to_heal {
+        let mut stats = world.get_mut::<CombatStats>(id).unwrap();
         stats.hp = i32::min(stats.hp + heals.heal, stats.max_hp);
     }
 
-    for (id, confusion) in to_add_confusion.iter() {
-        world.insert_one(*id, Confusion{turns: confusion.turns}).unwrap();
+    for (id, confusion) in to_add_confusion {
+        world.insert_one(id, Confusion{turns: confusion.turns}).unwrap();
+    }
+
+    for (id, name, target) in to_unequip {
+        world.remove_one::<Equipped>(id).unwrap();
+        world.insert_one(id, InBackpack{owner: target}).unwrap();
+        if target == *player_id {
+            log.messages.push(format!("You unequip your {}", name.name));
+        }
+    }
+
+    for (id, equippable, name, target) in to_equip {
+        world.insert_one(id, Equipped{owner: target, slot: equippable.slot}).unwrap();
+        world.remove_one::<InBackpack>(id).unwrap();
+        if target == *player_id {
+            log.messages.push(format!("You equip your {}", name.name));
+        }
     }
 }

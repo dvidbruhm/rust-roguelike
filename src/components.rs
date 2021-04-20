@@ -63,13 +63,38 @@ pub struct WantsToDropItem {
     pub item: Entity
 }
 
+pub struct WantsToUnequipItem {
+    pub item: Entity
+}
+
 pub struct Item {}
+
+#[derive(PartialEq, Copy, Clone)]
+pub enum EquipmentSlot { RightHand, LeftHand }
+
+#[derive(Copy, Clone)]
+pub struct Equippable {
+    pub slot: EquipmentSlot
+}
+
+pub struct Equipped {
+    pub owner: Entity,
+    pub slot: EquipmentSlot
+}
 
 pub struct InBackpack {
     pub owner: Entity
 }
 
 pub struct Consumable {}
+
+pub struct MeleePowerBonus {
+    pub power: i32
+}
+
+pub struct MeleeDefenseBonus {
+    pub defense: i32
+}
 
 #[derive(Clone, Copy)]
 pub struct ProvidesHealing {

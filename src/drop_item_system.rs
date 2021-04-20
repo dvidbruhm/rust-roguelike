@@ -1,7 +1,7 @@
 use hecs::*;
 use resources::*;
-use crate::components::{WantsToDropItem, Position, InBackpack, Name};
-use crate::gamelog::{GameLog};
+use crate::components::{Equipped, InBackpack, Name, Position, WantsToDropItem};
+use crate::gamelog::GameLog;
 
 pub fn drop_item(world: &mut World, res: &mut Resources) {
     let mut log = res.get_mut::<GameLog>().unwrap();
@@ -26,7 +26,8 @@ pub fn drop_item(world: &mut World, res: &mut Resources) {
     }
 
     for id in to_drop.iter() {
-        world.remove_one::<InBackpack>(*id).unwrap();
+        let _in_bp = world.remove_one::<InBackpack>(*id);
+        let _equipped = world.remove_one::<Equipped>(*id);
         world.insert_one(*id, Position {x: pos.x, y: pos.y}).unwrap();
     }
 }

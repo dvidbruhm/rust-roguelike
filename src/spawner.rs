@@ -3,12 +3,12 @@ use std::collections::HashMap;
 use hecs::*;
 use resources::*;
 use rltk::RandomNumberGenerator;
-use crate::components::{Position, Renderable, Player, Viewshed, Name, CombatStats, BlocksTile, Monster, Item, Consumable, ProvidesHealing, DealsDamage, Ranged, AreaOfEffect, Confusion, SerializeMe};
+use crate::components::{AreaOfEffect, BlocksTile, CombatStats, Confusion, Consumable, DealsDamage, EquipmentSlot, Equippable, Item, MeleeDefenseBonus, MeleePowerBonus, Monster, Name, Player, Position, ProvidesHealing, Ranged, Renderable, SerializeMe, Viewshed};
 use crate::Palette;
 use crate::rect::Rect;
 use crate::weighted_table::WeightedTable;
 
-const MAX_SPAWNS: i32 = 4;
+const MAX_SPAWNS: i32 = 8;
 
 
 pub fn player(world: &mut World, pos: (i32, i32)) -> Entity {
@@ -41,6 +41,10 @@ pub fn room_table(depth: i32) -> WeightedTable {
         .add("Fireball Scroll", 2 + depth)
         .add("Confusion Scroll", 2 + depth)
         .add("Magic Missile Scroll", 4)
+        .add("Dagger", 2)
+        .add("Shield", 2)
+        .add("Longsword", depth - 1)
+        .add("Tower Shield", depth - 1)
 }
 
 pub fn fill_room(world: &mut World, res: &mut Resources, room: &Rect, depth: i32) {
@@ -72,6 +76,10 @@ pub fn fill_room(world: &mut World, res: &mut Resources, room: &Rect, depth: i32
             "Fireball Scroll" => fireball_scroll(world, x, y),
             "Confusion Scroll" => confusion_scroll(world, x, y),
             "Magic Missile Scroll" => magic_missile_scroll(world, x, y),
+            "Dagger" => dagger(world, x, y),
+            "Shield" => shield(world, x, y),
+            "Longsword" => longsword(world, x, y),
+            "Tower Shield" => tower_shield(world, x, y),
             _ => {}
         }
     }
@@ -176,5 +184,73 @@ fn confusion_scroll(world: &mut World, x: i32, y: i32) {
         Consumable {},
         Ranged {range: 6},
         Confusion {turns: 4}
+    ));
+}
+
+fn dagger(world: &mut World, x: i32, y: i32) {
+    world.spawn((
+        Position {x, y},
+        Renderable {
+            glyph: rltk::to_cp437('│'),
+            fg: Palette::COLOR_3,
+            bg: Palette::MAIN_BG,
+            render: true,
+            order: 2
+        },
+        Name {name: "Dagger".to_string()},
+        Item {},
+        Equippable {slot: EquipmentSlot::RightHand},
+        MeleePowerBonus {power: 4}
+    ));
+}
+
+fn longsword(world: &mut World, x: i32, y: i32) {
+    world.spawn((
+        Position {x, y},
+        Renderable {
+            glyph: rltk::to_cp437('│'),
+            fg: Palette::COLOR_3,
+            bg: Palette::MAIN_BG,
+            render: true,
+            order: 2
+        },
+        Name {name: "Dagger".to_string()},
+        Item {},
+        Equippable {slot: EquipmentSlot::RightHand},
+        MeleePowerBonus {power: 8}
+    ));
+}
+
+fn shield(world: &mut World, x: i32, y: i32) {
+    world.spawn((
+        Position {x, y},
+        Renderable {
+            glyph: rltk::to_cp437('°'),
+            fg: Palette::COLOR_4,
+            bg: Palette::MAIN_BG,
+            render: true,
+            order: 2
+        },
+        Name {name: "Shield".to_string()},
+        Item {},
+        Equippable {slot: EquipmentSlot::LeftHand},
+        MeleeDefenseBonus {defense: 4}
+    ));
+}
+
+fn tower_shield(world: &mut World, x: i32, y: i32) {
+    world.spawn((
+        Position {x, y},
+        Renderable {
+            glyph: rltk::to_cp437('°'),
+            fg: Palette::COLOR_4,
+            bg: Palette::MAIN_BG,
+            render: true,
+            order: 2
+        },
+        Name {name: "Shield".to_string()},
+        Item {},
+        Equippable {slot: EquipmentSlot::LeftHand},
+        MeleeDefenseBonus {defense: 8}
     ));
 }

@@ -1,7 +1,8 @@
 use hecs::*;
 use resources::*;
+use crate::RunState;
 use crate::components::{TakeDamage, CombatStats, Player, Name};
-use crate::gamelog::{GameLog};
+use crate::gamelog::GameLog;
 
 pub fn damage(world: &mut World) {
     for (_id, (take_dmg, stats)) in &mut world.query::<(&mut TakeDamage, &mut CombatStats)>() {
@@ -28,7 +29,10 @@ pub fn delete_the_dead(world: &mut World, res: &mut Resources) {
                         log.messages.push(format!("{} is dead", &name.name));
                     }
                 }
-                Ok(_p) => println!("You are dead")
+                Ok(_p) => {
+                    let mut runstate = res.get_mut::<RunState>().unwrap();
+                    *runstate = RunState::GameOver;
+                }
             }
         }
     }

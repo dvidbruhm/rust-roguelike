@@ -1,7 +1,7 @@
 use hecs::*;
 use resources::*;
-use crate::components::{WantsToAttack, Name, CombatStats, TakeDamage};
-use crate::gamelog::{GameLog};
+use crate::components::{WantsToAttack, Name, CombatStats, TakeDamage, MeleePowerBonus, Equipped, MeleeDefenseBonus};
+use crate::gamelog::GameLog;
 
 pub fn melee_combat(world: &mut World, res: &mut Resources) {
     let mut log = res.get_mut::<GameLog>().unwrap();
@@ -13,16 +13,26 @@ pub fn melee_combat(world: &mut World, res: &mut Resources) {
         if stats.hp > 0 {
             let target_stats = &world.get::<CombatStats>(wants_attack.target).unwrap();
             if target_stats.hp > 0 {
-                let target_name = &world.get::<Name>(wants_attack.target).unwrap();
-                
-                let damage = i32::max(0, stats.power - target_stats.defense);
-                
-                if damage == 0 {
-                    log.messages.push(format!("{} is unable to hurt {}", &name.name, &target_name.name));
+                let mut offensize_bonus = 0;
+                for (_item_id, (power_bonus, equipped)) in world.query::<(&MeleePowerBonus, &Equipped)>().iter() {
+                    if equipped.owner == id { offensize_bonus += power_bonus.power }
                 }
-                else {
-                    log.messages.push(format!("{} hits {} for {} hp", &name.name, &target_name.name, damage));
-                    to_add_damage.push((wants_attack.target, damage));
+
+                if target_stats.hp > 0 {
+                    let mut defensize_bonus = 0;
+                    for (_item_id, (defense_bonus, equipped)) in world.query::<(&MeleeDefenseBonus, &Equipped)>().iter() {
+                        if equipped.owner == wants_attack.target { defensize_bonus += defense_bonus.defense }
+                    }
+                    let damage = i32::max(0, (stats.power + offensize_bonus) - (target_stats.defense + defensize_bonus));
+                    
+                    let target_name = &world.get::<Name>(wants_attack.target).unwrap();
+                    if damage == 0 {
+                        log.messages.push(format!("{} is unable to hurt {}", &name.name, &target_name.name));
+                    }
+                    else {
+                        log.messages.push(format!("{} hits {} for {} hp", &name.name, &target_name.name, damage));
+                        to_add_damage.push((wants_attack.target, damage));
+                    }
                 }
             }
         }

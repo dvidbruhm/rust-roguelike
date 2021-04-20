@@ -18,8 +18,9 @@ mod gui;
 mod gamelog;
 mod spawner;
 mod weighted_table;
+mod unequip_item_system;
 
-use components::{Position, Renderable, WantsToUseItem, WantsToDropItem, Ranged, InBackpack, Player, Viewshed};
+use components::{Position, Renderable, WantsToUseItem, WantsToDropItem, Ranged, InBackpack, Player, Viewshed, Equipped, WantsToUnequipItem};
 use map::Map;
 use gamelog::GameLog;
 
@@ -42,10 +43,12 @@ pub enum RunState {
     PlayerTurn,
     MonsterTurn,
     ShowInventory,
+    ShowItemActions {item: Entity},
     ShowTargeting {range: i32, item: Entity},
     MainMenu {menu_selection: gui::MainMenuSelection},
     SaveGame,
-    NextLevel
+    NextLevel,
+    GameOver
 }
 
 pub struct State {
@@ -61,8 +64,9 @@ impl State {
         melee_combat_system::melee_combat(&mut self.world, &mut self.resources);
         inventory_system::inventory(&mut self.world, &mut self.resources);
         drop_item_system::drop_item(&mut self.world, &mut self.resources);
-        damage_system::damage(&mut self.world);
+        unequip_item_system::unequip_item(&mut self.world, &mut self.resources);
         item_use_system::item_use(&mut self.world, &mut self.resources);
+        damage_system::damage(&mut self.world);
     }
 
     fn entities_to_delete_on_level_change(&mut self) -> Vec<Entity> {
@@ -77,6 +81,10 @@ impl State {
             
             if let Ok(backpack) = self.world.get::<InBackpack>(id) {
                 if backpack.owner == *player_id { to_delete = false; }
+            }
+
+            if let Ok(equipped) = self.world.get::<Equipped>(id) {
+                if equipped.owner == *player_id { to_delete = false; }
             }
 
             if to_delete { ids_to_delete.push(id); }
@@ -117,6 +125,29 @@ impl State {
 
         let mut log = self.resources.get_mut::<GameLog>().unwrap();
         log.messages.push("You descend in the staircase".to_string());
+    }
+
+    fn game_over_cleanup(&mut self) {
+        // Delete everything
+        self.world.clear();
+
+        // Create map
+        let map;
+        {
+            let mut map_res = self.resources.get_mut::<Map>().unwrap();
+            *map_res = Map::new_map_rooms_corridors(10, 4, 8, 1);
+            map = map_res.clone();
+        }
+
+        for room in map.rooms.iter() {
+            spawner::fill_room(&mut self.world, &mut self.resources, room, 1);
+        }
+
+        // Create player
+        let (player_x, player_y) = map.rooms[0].center();
+        let player_id = spawner::player(&mut self.world, (player_x, player_y));
+        self.resources.insert(Point::new(player_x, player_y));
+        self.resources.insert(player_id);
     }
 }
 
@@ -172,14 +203,22 @@ impl GameState for State {
                     gui::ItemMenuResult::NoResponse => {}
                     gui::ItemMenuResult::Cancel => { new_runstate = RunState::AwaitingInput }
                     gui::ItemMenuResult::Selected => {
+                        new_runstate = RunState::ShowItemActions{ item: result.1.unwrap() }
+                    }
+                }
+            }
+            RunState::ShowItemActions{item} => {
+                let result = gui::show_item_actions(&mut self.world, &mut self.resources, item, ctx);
+                match result {
+                    gui::ItemActionSelection::NoSelection => {}
+                    gui::ItemActionSelection::Used => {
                         let mut to_add_wants_use_item: Vec<Entity> = Vec::new();
-                        let item_id = result.1.unwrap();
                         {
                             let player_id = self.resources.get::<Entity>().unwrap();
-                            let is_item_ranged: Result<Ref<'_, Ranged>, ComponentError> = self.world.get::<Ranged>(item_id);
+                            let is_item_ranged = self.world.get::<Ranged>(item);
                             match is_item_ranged {
                                 Ok(is_item_ranged) => {
-                                    new_runstate = RunState::ShowTargeting{range:is_item_ranged.range, item:item_id};
+                                    new_runstate = RunState::ShowTargeting{range:is_item_ranged.range, item};
                                 }
                                 Err(_) => {
                                     to_add_wants_use_item.push(*player_id);
@@ -189,15 +228,20 @@ impl GameState for State {
                         }
 
                         for id in to_add_wants_use_item.iter() {
-                            self.world.insert_one(*id, WantsToUseItem {item: item_id, target: None}).unwrap();
+                            self.world.insert_one(*id, WantsToUseItem {item, target: None}).unwrap();
                         }
                     }
-                    gui::ItemMenuResult::Dropped => {
-                        let item_id = result.1.unwrap();
+                    gui::ItemActionSelection::Dropped => {
                         let player_id = self.resources.get::<Entity>().unwrap();
-                        self.world.insert_one(*player_id, WantsToDropItem {item: item_id}).unwrap();
+                        self.world.insert_one(*player_id, WantsToDropItem {item}).unwrap();
                         new_runstate = RunState::PlayerTurn;
                     }
+                    gui::ItemActionSelection::Unequipped => {
+                        let player_id = self.resources.get::<Entity>().unwrap();
+                        self.world.insert_one(*player_id, WantsToUnequipItem{item}).unwrap();
+                        new_runstate = RunState::PlayerTurn;
+                    }
+                    gui::ItemActionSelection::Cancel => { new_runstate = RunState::ShowInventory}
                 }
             }
             RunState::ShowTargeting{range, item} => {
@@ -209,8 +253,7 @@ impl GameState for State {
                         let player_id = self.resources.get::<Entity>().unwrap();
                         self.world.insert_one(*player_id, WantsToUseItem{item, target: res.1}).unwrap();
                         new_runstate = RunState::PlayerTurn;
-                    },
-                    _ => {}
+                    }
                 }
             }
             RunState::MainMenu{..} => {
@@ -246,6 +289,16 @@ impl GameState for State {
             RunState::NextLevel => {
                 self.next_level();
                 new_runstate = RunState::PreRun;
+            }
+            RunState::GameOver => {
+                let result = gui::game_over(ctx);
+                match result {
+                    gui::GameOverResult::NoSelection => {}
+                    gui::GameOverResult::QuitToMenu => {
+                        self.game_over_cleanup();
+                        new_runstate = RunState::MainMenu {menu_selection: gui::MainMenuSelection::NewGame};
+                    }
+                }
             }
         }
 

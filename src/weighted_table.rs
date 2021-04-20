@@ -23,9 +23,11 @@ impl WeightedTable {
     }
 
     pub fn add<S:ToString>(mut self, name: S, weight: i32) -> WeightedTable {
-        let entry = WeightedEntry::new(name.to_string(), weight);
-        self.entries.push(entry);
-        self.total_weight += weight;
+        if weight > 0 {
+            let entry = WeightedEntry::new(name.to_string(), weight);
+            self.entries.push(entry);
+            self.total_weight += weight;
+        }
         self
     }
 
