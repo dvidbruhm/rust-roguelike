@@ -159,6 +159,7 @@ impl GameState for State {
 
         match new_runstate {
             RunState::MainMenu{..} => {}
+            RunState::GameOver => {}
             _ => {
                 map::draw_map(&self, ctx);
 
