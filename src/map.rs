@@ -49,6 +49,11 @@ impl Map {
         (idx as i32 % self.width, idx as i32 / self.width)
     }
 
+    pub fn is_wall(&self, x: i32, y: i32) -> bool {
+        let idx = self.xy_idx(x, y);
+        self.tiles[idx] == TileType::Wall
+    }
+
     pub fn set_blocked(&mut self) {
         for (i, t) in self.tiles.iter_mut().enumerate() {
             self.blocked[i] = *t == TileType::Wall;
@@ -91,6 +96,26 @@ impl Map {
 
     fn apply_horizontal_corridor(&mut self, x1: i32, x2:i32, y: i32) {
         for x in cmp::min(x1, x2)..=cmp::max(x1, x2) {
+            self.set_tile(x, y, TileType::Floor);
+        }
+    }
+
+    fn remove_useless_walls(&mut self) {
+        let mut to_remove: Vec<(i32, i32)> = Vec::new();
+
+        for i in 0..self.tiles.len() {
+            let (x, y) = self.idx_xy(i);
+
+            if x < 1 || x > self.width - 2 || y < 1 || y > self.height - 2 { continue }
+
+            if self.is_wall(x - 1, y - 1) && self.is_wall(x, y - 1) && self.is_wall(x + 1, y - 1) &&
+               self.is_wall(x - 1, y    ) && self.is_wall(x, y    ) && self.is_wall(x + 1, y    ) &&
+               self.is_wall(x - 1, y + 1) && self.is_wall(x, y + 1) && self.is_wall(x + 1, y + 1) {
+                to_remove.push((x, y));
+            }
+        }
+
+        for (x, y) in to_remove {
             self.set_tile(x, y, TileType::Floor);
         }
     }
@@ -144,6 +169,8 @@ impl Map {
         let stairs_idx = map.xy_idx(stairs_down_pos.0, stairs_down_pos.1);
         map.tiles[stairs_idx] = TileType::StairsDown;
 
+        map.remove_useless_walls();
+
         map
     }
 }
@@ -185,26 +212,55 @@ impl BaseMap for Map {
     }
 }
 
+fn wall_glyph(map: &Map, x: i32, y: i32) -> char {
+    if x < 1 || x > map.width - 2 || y < 1 || y > map.height - 2 { return 'x' }
+    let mut mask: u8 = 0;
+
+    if map.is_wall(x, y - 1) { mask += 1 }
+    if map.is_wall(x, y + 1) { mask += 2 }
+    if map.is_wall(x - 1, y) { mask += 4 }
+    if map.is_wall(x + 1, y) { mask += 8 }
+
+    match mask {
+        0 => { '■' }
+        1 => { '│' }
+        2 => { '│' }
+        3 => { '│' }
+        4 => { '─' }
+        5 => { '┘' }
+        6 => { '┐' }
+        7 => { '┤' }
+        8 => { '─' }
+        9 => { '└' }
+        10 => { '┌' }
+        11 => { '├' }
+        12 => { '─' }
+        13 => { '┴' }
+        14 => { '┬' }
+        15 => { '┼' }
+        _ => { 'x' }
+    }
+}
+
 pub fn draw_map(gs: &State, ctx : &mut Rltk) {
     let map = gs.resources.get::<Map>().unwrap();
-    let mut y = 0;
-    let mut x = 0;
 
     for (idx, tile) in map.tiles.iter().enumerate() {
         if map.revealed_tiles[idx] {
             let glyph;
             let mut fg;
             let mut bg;
+            let (x, y) = map.idx_xy(idx);
             match tile {
                 TileType::Floor => {
                     fg = Palette::COLOR_2;
                     bg = Palette::MAIN_BG;
-                    glyph = rltk::to_cp437('░');
+                    glyph = rltk::to_cp437(' ');
                 }
                 TileType::Wall => {
                     fg = Palette::MAIN_FG;
                     bg = Palette::MAIN_BG;
-                    glyph = rltk::to_cp437('▓');
+                    glyph = rltk::to_cp437(wall_glyph(&map, x, y));
                 }
                 TileType::StairsDown => {
                     fg = Palette::MAIN_FG;
@@ -221,12 +277,7 @@ pub fn draw_map(gs: &State, ctx : &mut Rltk) {
                 fg = fg.to_greyscale();
                 bg = bg.to_greyscale();
             }
-            ctx.set(x + OFFSET_X, y + OFFSET_Y, fg, bg, glyph);
-        }
-        x += 1;
-        if x > 79 {
-            x = 0;
-            y += 1;
+            ctx.set(x as usize + OFFSET_X, y as usize + OFFSET_Y, fg, bg, glyph);
         }
     }
 }
