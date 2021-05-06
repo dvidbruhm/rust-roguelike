@@ -1,10 +1,11 @@
 use hecs::*;
 use resources::*;
-use crate::components::{WantsToAttack, Name, CombatStats, TakeDamage, MeleePowerBonus, Equipped, MeleeDefenseBonus};
+use crate::{Palette, components::{CombatStats, Equipped, MeleeDefenseBonus, MeleePowerBonus, Name, Position, TakeDamage, WantsToAttack}, particle_system::ParticleBuilder};
 use crate::gamelog::GameLog;
 
 pub fn melee_combat(world: &mut World, res: &mut Resources) {
     let mut log = res.get_mut::<GameLog>().unwrap();
+    let mut particle_builder = res.get_mut::<ParticleBuilder>().unwrap();
 
     let mut to_remove_wants_melee: Vec<Entity> = vec![];
     let mut to_add_damage: Vec<(Entity, i32)> = vec![];
@@ -32,6 +33,11 @@ pub fn melee_combat(world: &mut World, res: &mut Resources) {
                     else {
                         log.messages.push(format!("{} hits {} for {} hp", &name.name, &target_name.name, damage));
                         to_add_damage.push((wants_attack.target, damage));
+                    }
+
+                    let pos = &world.get::<Position>(wants_attack.target);
+                    if let Ok(pos) = pos {
+                        particle_builder.request(pos.x, pos.y, 0.0, 0.0, Palette::COLOR_4, Palette::MAIN_BG, rltk::to_cp437('‼'), 250.0)
                     }
                 }
             }

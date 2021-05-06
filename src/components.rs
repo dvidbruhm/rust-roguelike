@@ -2,6 +2,8 @@ use serde::{Serialize, Deserialize};
 use hecs::*;
 use rltk;
 
+use crate::RenderOrder;
+
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Position {
     pub x: i32,
@@ -14,7 +16,21 @@ pub struct Renderable {
     pub fg: rltk::RGB,
     pub bg: rltk::RGB,
     pub render: bool,
-    pub order: i32
+    pub always_render: bool,
+    pub order: RenderOrder
+}
+
+impl Default for Renderable {
+    fn default() -> Self {
+        Renderable {
+            glyph: rltk::to_cp437(' '),
+            fg: rltk::RGB{r: 1., g: 1., b: 1.},
+            bg: rltk::RGB{r: 0., g: 0., b: 0.},
+            render: true,
+            always_render: false,
+            order: RenderOrder::Player
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -151,3 +167,17 @@ impl TakeDamage {
 }
 
 pub struct SerializeMe {}
+
+pub struct Lifetime {
+    pub ms: f32
+}
+
+pub struct Velocity {
+    pub x: f32,
+    pub y: f32
+}
+
+pub struct Particle {
+    pub float_x: f32,
+    pub float_y: f32
+}

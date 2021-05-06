@@ -1,10 +1,10 @@
 use hecs::*;
 use resources::Resources;
 use rltk;
-use rltk::{Point};
-use crate::{RunState};
+use rltk::Point;
+use crate::{Palette, RunState, particle_system::ParticleBuilder};
 use crate::components::{Position, Monster, Viewshed, WantsToAttack, Confusion};
-use crate::map::{Map};
+use crate::map::Map;
 
 
 //pub fn monster_ai(sworld: &mut SubWorld, #[resource] ppos: &Point, #[resource] map: &mut Map) {
@@ -17,6 +17,7 @@ pub fn monster_ai(world: &mut World, res: &mut Resources) {
     let player_id: &Entity = &res.get::<Entity>().unwrap();
     let map: &mut Map = &mut res.get_mut::<Map>().unwrap();
     let ppos: &Point = &res.get::<Point>().unwrap();
+    let mut particle_builder = res.get_mut::<ParticleBuilder>().unwrap();
 
     let mut needs_wants_to_attack: Vec<Entity> = Vec::new();
     let mut to_update_confusion: Vec<(Entity, Confusion)> = Vec::new();
@@ -27,6 +28,7 @@ pub fn monster_ai(world: &mut World, res: &mut Resources) {
             Err(_e) => {},
             Ok(confusion) => {
                 to_update_confusion.push((id, *confusion));
+                particle_builder.request(pos.x, pos.y, 0.0, 0.0, Palette::COLOR_3, Palette::MAIN_BG, rltk::to_cp437('?'), 300.0);
                 continue;
             }
         }
@@ -55,7 +57,7 @@ pub fn monster_ai(world: &mut World, res: &mut Resources) {
     }
 
     for id in needs_wants_to_attack.iter() {
-        let _res = world.insert_one(*id, WantsToAttack {target: *player_id});
+        world.insert_one(*id, WantsToAttack {target: *player_id}).unwrap();
     }
 
     for (id, _confusion) in to_update_confusion.iter() {

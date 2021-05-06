@@ -1,6 +1,6 @@
 use hecs::*;
 use resources::*;
-use crate::gamelog::GameLog;
+use crate::{Palette, components::Position, gamelog::GameLog, particle_system::ParticleBuilder};
 use crate::components::{WantsToUseItem, CombatStats, ProvidesHealing, Name, Consumable, DealsDamage, TakeDamage, AreaOfEffect, Confusion, Equippable, Equipped, InBackpack};
 use crate::map::Map;
 
@@ -8,6 +8,7 @@ pub fn item_use(world: &mut World, res: &mut Resources) {
     let mut log = res.get_mut::<GameLog>().unwrap();
     let player_id = res.get::<Entity>().unwrap();
     let map = res.get::<Map>().unwrap();
+    let mut p_builder = res.get_mut::<ParticleBuilder>().unwrap();
     let mut to_remove: Vec<Entity> = Vec::new();
     let mut to_remove_wants_use: Vec<Entity> = Vec::new();
     let mut to_add_take_damage: Vec<(Entity, DealsDamage)> = Vec::new();
@@ -28,8 +29,8 @@ pub fn item_use(world: &mut World, res: &mut Resources) {
                     Err(_e) => {
                         // Single target
                         let idx = map.xy_idx(t.x, t.y);
-                        for monster in map.tile_content[idx].iter() {
-                            targets.push(*monster);
+                        for entity in map.tile_content[idx].iter() {
+                            targets.push(*entity);
                         }
                     }
                     Ok(aoe) => {
@@ -38,9 +39,10 @@ pub fn item_use(world: &mut World, res: &mut Resources) {
                         affected_tiles.retain(|p| p.x > 0 && p.x < map.width-1 && p.y > 0 && p.y < map.height-1);
                         for pt in affected_tiles.iter() {
                             let idx = map.xy_idx(pt.x, pt.y);
-                            for monster in map.tile_content[idx].iter() {
-                                targets.push(*monster);
+                            for entity in map.tile_content[idx].iter() {
+                                targets.push(*entity);
                             }
+                            p_builder.request(pt.x, pt.y, 0.0, 0.0, Palette::COLOR_3, Palette::MAIN_BG, rltk::to_cp437('o'), 250.0)
                         }
                     }
                 }
@@ -64,6 +66,10 @@ pub fn item_use(world: &mut World, res: &mut Resources) {
                                 log.messages.push(format!("You use the {}, healing {} hp", name.name, healer.heal));
                             }
                             used_item = true;
+
+                            if let Ok(pos) = world.get::<Position>(*target) {
+                                p_builder.request(pos.x, pos.y, 0.0, -3.0, Palette::COLOR_3, Palette::MAIN_BG, rltk::to_cp437('♥'), 1000.0)
+                            }
                         }
                     }
                 }
@@ -77,14 +83,18 @@ pub fn item_use(world: &mut World, res: &mut Resources) {
             Err(_e) => {}
             Ok(dd) => {
                 used_item = false;
-                for monster in targets.iter() {
-                    to_add_take_damage.push((*monster, *dd));
+                for target in targets.iter() {
+                    to_add_take_damage.push((*target, *dd));
                     if id == *player_id {
-                        let monster_name = world.get::<Name>(*monster).unwrap();
+                        let monster_name = world.get::<Name>(*target).unwrap();
                         let item_name = world.get::<Name>(use_item.item).unwrap();
                         log.messages.push(format!("You use {} on {}, dealing {} hp", item_name.name, monster_name.name, dd.damage));
                     }
                     used_item = true;
+
+                    if let Ok(pos) = world.get::<Position>(*target) {
+                        p_builder.request(pos.x, pos.y, 0.0, 0.0, Palette::COLOR_4, Palette::MAIN_BG, rltk::to_cp437('‼'), 250.0)
+                    }
                 }
             }
         }
@@ -95,14 +105,18 @@ pub fn item_use(world: &mut World, res: &mut Resources) {
             Err(_e) => {},
             Ok(confusion) => {
                 used_item = false;
-                for monster in targets.iter() {
-                    to_add_confusion.push((*monster, *confusion));
+                for target in targets.iter() {
+                    to_add_confusion.push((*target, *confusion));
                     if id == *player_id {
-                        let monster_name = world.get::<Name>(*monster).unwrap();
+                        let monster_name = world.get::<Name>(*target).unwrap();
                         let item_name = world.get::<Name>(use_item.item).unwrap();
                         log.messages.push(format!("You use {} on {}, confusing them", item_name.name, monster_name.name));
                     }
                     used_item = true;
+
+                    if let Ok(pos) = world.get::<Position>(*target) {
+                        p_builder.request(pos.x, pos.y, 0.0, 0.0, Palette::COLOR_3, Palette::MAIN_BG, rltk::to_cp437('?'), 300.0)
+                    }
                 }
             }
         }

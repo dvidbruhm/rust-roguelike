@@ -19,6 +19,7 @@ mod gamelog;
 mod spawner;
 mod weighted_table;
 mod unequip_item_system;
+mod particle_system;
 
 use components::{Position, Renderable, WantsToUseItem, WantsToDropItem, Ranged, InBackpack, Player, Viewshed, Equipped, WantsToUnequipItem};
 use map::Map;
@@ -51,6 +52,14 @@ pub enum RunState {
     GameOver
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
+pub enum RenderOrder {
+    Items,
+    NPC,
+    Player,
+    Particle
+}
+
 pub struct State {
     world: World,
     resources: Resources
@@ -67,6 +76,7 @@ impl State {
         unequip_item_system::unequip_item(&mut self.world, &mut self.resources);
         item_use_system::item_use(&mut self.world, &mut self.resources);
         damage_system::damage(&mut self.world);
+        particle_system::spawn_particles(&mut self.world, &mut self.resources);
     }
 
     fn entities_to_delete_on_level_change(&mut self) -> Vec<Entity> {
@@ -154,6 +164,7 @@ impl State {
 impl GameState for State {
     fn tick(&mut self, ctx: &mut Rltk) {
         ctx.cls();
+        particle_system::update_particles(&mut self.world, &mut self.resources, ctx);
 
         let mut new_runstate: RunState = *self.resources.get::<RunState>().unwrap();
 
@@ -168,11 +179,11 @@ impl GameState for State {
 
                     let mut query = self.world.query::<(&Position, &Renderable)>();
                     let mut to_render = query.iter().collect::<Vec<_>>();
-                    to_render.sort_by_key(|a| -a.1.1.order);
+                    to_render.sort_by_key(|a| a.1.1.order);
 
                     for (_id, (pos, render)) in to_render {
                         let idx = map.xy_idx(pos.x, pos.y);
-                        if render.render && map.visible_tiles[idx] {
+                        if (idx < map.tiles.len() && render.render && map.visible_tiles[idx]) || render.always_render {
                             ctx.set(pos.x + map::OFFSET_X as i32, pos.y + map::OFFSET_Y as i32, render.fg, render.bg, render.glyph);
                         }
                     }
@@ -338,6 +349,7 @@ fn main() -> rltk::BError {
     gs.resources.insert(player_id);
     gs.resources.insert(RunState::MainMenu{menu_selection: gui::MainMenuSelection::NewGame});
     gs.resources.insert(gamelog::GameLog{messages: vec!["Welcome to the roguelike!".to_string()]});
+    gs.resources.insert(particle_system::ParticleBuilder::new());
 
     rltk::main_loop(context, gs)
 }

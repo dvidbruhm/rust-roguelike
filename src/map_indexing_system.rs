@@ -1,6 +1,6 @@
 use hecs::*;
 use resources::Resources;
-use crate::map::{Map};
+use crate::map::Map;
 use crate::components::{BlocksTile, Position};
 
 
@@ -12,6 +12,7 @@ pub fn map_indexing(world: &mut World, res: &mut Resources) {
 
     for (id, (_bt, pos)) in world.query_mut::<(Option<&BlocksTile>, &Position)>() {
         let idx = map.xy_idx(pos.x, pos.y);
+        if idx > map.tiles.len() { continue }
 
         if let Some(_bt) = _bt {
             map.blocked[idx] = true;

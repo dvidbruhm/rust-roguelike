@@ -4,7 +4,7 @@ use hecs::*;
 use resources::*;
 use rltk::RandomNumberGenerator;
 use crate::components::{AreaOfEffect, BlocksTile, CombatStats, Confusion, Consumable, DealsDamage, EquipmentSlot, Equippable, Item, MeleeDefenseBonus, MeleePowerBonus, Monster, Name, Player, Position, ProvidesHealing, Ranged, Renderable, SerializeMe, Viewshed};
-use crate::Palette;
+use crate::{Palette, RenderOrder};
 use crate::rect::Rect;
 use crate::weighted_table::WeightedTable;
 
@@ -19,8 +19,8 @@ pub fn player(world: &mut World, pos: (i32, i32)) -> Entity {
             glyph: rltk::to_cp437('ô'),
             fg: Palette::COLOR_0,
             bg: Palette::MAIN_BG,
-            render: true,
-            order: 0
+            order: RenderOrder::Player,
+            ..Default::default()
         },
         Player {},
         Viewshed {
@@ -100,8 +100,8 @@ fn monster(world: &mut World, x: i32, y: i32, glyph: rltk::FontCharType, name: S
             glyph,
             fg: Palette::COLOR_1,
             bg: Palette::MAIN_BG,
-            render: true,
-            order: 1
+            order: RenderOrder::NPC,
+            ..Default::default()
         },
         Viewshed {
             visible_tiles: Vec::new(),
@@ -122,8 +122,8 @@ fn health_potion(world: &mut World, x: i32, y:i32) {
             glyph: rltk::to_cp437('p'),
             fg: Palette::COLOR_4,
             bg: Palette::MAIN_BG,
-            render: true,
-            order: 2
+            order: RenderOrder::Items,
+            ..Default::default()
         },
         Name {name: "Health potion".to_string()},
         Item {},
@@ -139,8 +139,8 @@ fn magic_missile_scroll(world: &mut World, x: i32, y:i32) {
             glyph: rltk::to_cp437('('),
             fg: Palette::COLOR_4,
             bg: Palette::MAIN_BG,
-            render: true,
-            order: 2
+            order: RenderOrder::Items,
+            ..Default::default()
         },
         Name {name: "Magic missile scroll".to_string()},
         Item {},
@@ -157,8 +157,8 @@ fn fireball_scroll(world: &mut World, x: i32, y: i32) {
             glyph: rltk::to_cp437('*'),
             fg: Palette::COLOR_4,
             bg: Palette::MAIN_BG,
-            render: true,
-            order: 2
+            order: RenderOrder::Items,
+            ..Default::default()
         },
         Name {name: "Fireball scroll".to_string()},
         Item {},
@@ -176,8 +176,8 @@ fn confusion_scroll(world: &mut World, x: i32, y: i32) {
             glyph: rltk::to_cp437('&'),
             fg: Palette::COLOR_4,
             bg: Palette::MAIN_BG,
-            render: true,
-            order: 2
+            order: RenderOrder::Items,
+            ..Default::default()
         },
         Name {name: "Confusion scroll".to_string()},
         Item {},
@@ -194,8 +194,8 @@ fn dagger(world: &mut World, x: i32, y: i32) {
             glyph: rltk::to_cp437('│'),
             fg: Palette::COLOR_3,
             bg: Palette::MAIN_BG,
-            render: true,
-            order: 2
+            order: RenderOrder::Items,
+            ..Default::default()
         },
         Name {name: "Dagger".to_string()},
         Item {},
@@ -211,8 +211,8 @@ fn longsword(world: &mut World, x: i32, y: i32) {
             glyph: rltk::to_cp437('│'),
             fg: Palette::COLOR_3,
             bg: Palette::MAIN_BG,
-            render: true,
-            order: 2
+            order: RenderOrder::Items,
+            ..Default::default()
         },
         Name {name: "Dagger".to_string()},
         Item {},
@@ -228,8 +228,8 @@ fn shield(world: &mut World, x: i32, y: i32) {
             glyph: rltk::to_cp437('°'),
             fg: Palette::COLOR_4,
             bg: Palette::MAIN_BG,
-            render: true,
-            order: 2
+            order: RenderOrder::Items,
+            ..Default::default()
         },
         Name {name: "Shield".to_string()},
         Item {},
@@ -245,8 +245,8 @@ fn tower_shield(world: &mut World, x: i32, y: i32) {
             glyph: rltk::to_cp437('°'),
             fg: Palette::COLOR_4,
             bg: Palette::MAIN_BG,
-            render: true,
-            order: 2
+            order: RenderOrder::Items,
+            ..Default::default()
         },
         Name {name: "Shield".to_string()},
         Item {},
