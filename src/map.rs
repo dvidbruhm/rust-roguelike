@@ -1,11 +1,9 @@
-use std::cmp as cmp;
 use serde;
 use serde::{Serialize, Deserialize};
 use hecs::*;
 use rltk;
-use rltk::{RandomNumberGenerator, Rltk, Algorithm2D, BaseMap, Point};
+use rltk::{Rltk, Algorithm2D, BaseMap, Point};
 use crate::{State, Palette};
-use crate::rect::{Rect};
 
 
 pub const MAPWIDTH: usize = 80;
@@ -22,7 +20,6 @@ pub enum TileType {
 #[derive(Default, Serialize, Deserialize, Clone)]
 pub struct Map {
     pub tiles: Vec<TileType>,
-    pub rooms: Vec<Rect>,
     pub width: i32,
     pub height: i32,
     pub revealed_tiles: Vec<bool>,
@@ -36,6 +33,19 @@ pub struct Map {
 }
 
 impl Map {
+    pub fn new(new_depth: i32) -> Map {
+        Map {
+            tiles: vec![TileType::Wall; MAPCOUNT],
+            width: MAPWIDTH as i32,
+            height: MAPHEIGHT as i32,
+            revealed_tiles: vec![false; MAPCOUNT],
+            visible_tiles: vec![false; MAPCOUNT],
+            blocked: vec![false; MAPCOUNT],
+            tile_content: vec![Vec::new(); MAPCOUNT],
+            depth: new_depth
+        }
+    }
+
     pub fn set_tile(&mut self, x: i32, y: i32, value: TileType) {
         let idx = self.xy_idx(x, y);
         self.tiles[idx] = value;
@@ -78,100 +88,6 @@ impl Map {
         if x < 1 || x >= self.width || y < 1 || y >= self.height { return false; }
         let idx = self.xy_idx(x, y);
         !self.blocked[idx]
-    }
-
-    fn apply_room_to_map(&mut self, room: &Rect) {
-        for y in room.y1 .. room.y2 {
-            for x in room.x1 .. room.x2 {
-                self.set_tile(x, y, TileType::Floor);
-            }
-        }
-    }
-
-    fn apply_vertical_corridor(&mut self, x:i32, y1: i32, y2:i32) {
-        for y in cmp::min(y1, y2)..=cmp::max(y1, y2) {
-            self.set_tile(x, y, TileType::Floor);
-        }
-    }
-
-    fn apply_horizontal_corridor(&mut self, x1: i32, x2:i32, y: i32) {
-        for x in cmp::min(x1, x2)..=cmp::max(x1, x2) {
-            self.set_tile(x, y, TileType::Floor);
-        }
-    }
-
-    fn remove_useless_walls(&mut self) {
-        let mut to_remove: Vec<(i32, i32)> = Vec::new();
-
-        for i in 0..self.tiles.len() {
-            let (x, y) = self.idx_xy(i);
-
-            if x < 1 || x > self.width - 2 || y < 1 || y > self.height - 2 { continue }
-
-            if self.is_wall(x - 1, y - 1) && self.is_wall(x, y - 1) && self.is_wall(x + 1, y - 1) &&
-               self.is_wall(x - 1, y    ) && self.is_wall(x, y    ) && self.is_wall(x + 1, y    ) &&
-               self.is_wall(x - 1, y + 1) && self.is_wall(x, y + 1) && self.is_wall(x + 1, y + 1) {
-                to_remove.push((x, y));
-            }
-        }
-
-        for (x, y) in to_remove {
-            self.set_tile(x, y, TileType::Floor);
-        }
-    }
-
-    pub fn new_map_rooms_corridors(max_rooms: i32, min_size: i32, max_size: i32, new_depth: i32) -> Map {
-        let mut map = Map {
-            tiles: vec![TileType::Wall; MAPCOUNT],
-            rooms: Vec::new(),
-            width: MAPWIDTH as i32,
-            height: MAPHEIGHT as i32,
-            revealed_tiles: vec![false; MAPCOUNT],
-            visible_tiles: vec![false; MAPCOUNT],
-            blocked: vec![false; MAPCOUNT],
-            tile_content: vec![Vec::new(); MAPCOUNT],
-            depth: new_depth
-        };
-        let mut rng = RandomNumberGenerator::new();
-
-        for _ in 0..max_rooms {
-            let w : i32 = rng.range(min_size, max_size);
-            let h : i32 = rng.range(min_size, max_size);
-            let x : i32 = rng.range(1, map.width - w - 1);
-            let y : i32 = rng.range(1, map.height - h - 1);
-
-            let new_room = Rect::new(x, y, w, h);
-            let mut place_room = true;
-
-            for other_room in map.rooms.iter() {
-                if new_room.intersect(&other_room) {
-                    place_room = false;
-                }
-            }
-
-            if place_room {
-                map.apply_room_to_map(&new_room);
-                map.rooms.push(new_room);
-            }
-        }
-
-        for i in 1..map.rooms.len() {
-            let (x1, y1) = map.rooms[i].center();
-            let (x2, y2) = map.rooms[i - 1].center();
-
-            map.apply_horizontal_corridor(x1, x2, y1);
-            map.apply_vertical_corridor(x2, y1, y2);
-            map.apply_vertical_corridor(x1, y1, y2);
-            map.apply_horizontal_corridor(x1, x2, y2);
-        }
-
-        let stairs_down_pos = map.rooms[map.rooms.len() - 1].center();
-        let stairs_idx = map.xy_idx(stairs_down_pos.0, stairs_down_pos.1);
-        map.tiles[stairs_idx] = TileType::StairsDown;
-
-        map.remove_useless_walls();
-
-        map
     }
 }
 

@@ -21,6 +21,8 @@ mod weighted_table;
 mod unequip_item_system;
 mod particle_system;
 
+pub mod map_builders;
+
 use components::{Position, Renderable, WantsToUseItem, WantsToDropItem, Ranged, InBackpack, Player, Viewshed, Equipped, WantsToUnequipItem};
 use map::Map;
 use gamelog::GameLog;
@@ -109,26 +111,26 @@ impl State {
             self.world.despawn(id).unwrap();
         }
 
-        let map_copy;
+        let mut map_builder;
         let current_depth;
+        let start_pos;
         {
             let mut map = self.resources.get_mut::<Map>().unwrap();
             current_depth = map.depth;
-            *map = Map::new_map_rooms_corridors(10, 3, 8, current_depth + 1);
-            map_copy = map.clone();
+            map_builder = map_builders::random_builder(current_depth + 1);
+            map_builder.build_map();
+            *map = map_builder.get_map();
+            start_pos = map_builder.get_starting_position();
         }
 
-        for room in map_copy.rooms.iter() {
-            spawner::fill_room(&mut self.world, &mut self.resources, room, current_depth + 1);
-        }
+        map_builder.spawn_entities(&mut self.world, &mut self.resources);
 
         let player_id = self.resources.get::<Entity>().unwrap();
-        let (player_x, player_y) = map_copy.rooms[0].center();
         let mut player_pos = self.resources.get_mut::<Point>().unwrap();
-        *player_pos = Point::new(player_x, player_y);
+        *player_pos = Point::new(start_pos.x, start_pos.y);
         let mut player_pos_comp = self.world.get_mut::<Position>(*player_id).unwrap();
-        player_pos_comp.x = player_x;
-        player_pos_comp.y = player_y;
+        player_pos_comp.x = start_pos.x;
+        player_pos_comp.y = start_pos.y;
 
         let player_vs = self.world.get_mut::<Viewshed>(*player_id);
         if let Ok(mut vs) = player_vs { vs.dirty = true; }
@@ -142,21 +144,21 @@ impl State {
         self.world.clear();
 
         // Create map
-        let map;
+        let mut map_builder;
+        let start_pos;
         {
             let mut map_res = self.resources.get_mut::<Map>().unwrap();
-            *map_res = Map::new_map_rooms_corridors(10, 4, 8, 1);
-            map = map_res.clone();
+            map_builder = map_builders::random_builder(1);
+            map_builder.build_map();
+            *map_res = map_builder.get_map();
+            start_pos = map_builder.get_starting_position();
         }
 
-        for room in map.rooms.iter() {
-            spawner::fill_room(&mut self.world, &mut self.resources, room, 1);
-        }
+        map_builder.spawn_entities(&mut self.world, &mut self.resources);
 
         // Create player
-        let (player_x, player_y) = map.rooms[0].center();
-        let player_id = spawner::player(&mut self.world, (player_x, player_y));
-        self.resources.insert(Point::new(player_x, player_y));
+        let player_id = spawner::player(&mut self.world, (start_pos.x, start_pos.y));
+        self.resources.insert(Point::new(start_pos.x, start_pos.y));
         self.resources.insert(player_id);
     }
 }
@@ -332,20 +334,19 @@ fn main() -> rltk::BError {
         resources: Resources::default()
     };
 
-    let map: Map = Map::new_map_rooms_corridors(10, 4, 8, 1);
-    let player_pos = map.rooms[0].center();
+    let mut map_builder = map_builders::random_builder(1);
+    map_builder.build_map();
+    let player_pos = map_builder.get_starting_position();
     gs.resources.insert(rltk::RandomNumberGenerator::new());
 
     // Player
-    let player_id = spawner::player(&mut gs.world, player_pos);
+    let player_id = spawner::player(&mut gs.world, (player_pos.x, player_pos.y));
 
     // Monsters and items
-    for r in map.rooms.iter().skip(1) {
-        spawner::fill_room(&mut gs.world, &mut gs.resources, r, 1);
-    }
+    map_builder.spawn_entities(&mut gs.world, &mut gs.resources);
 
-    gs.resources.insert(map);
-    gs.resources.insert(rltk::Point::new(player_pos.0, player_pos.1));
+    gs.resources.insert(map_builder.get_map());
+    gs.resources.insert(rltk::Point::new(player_pos.x, player_pos.y));
     gs.resources.insert(player_id);
     gs.resources.insert(RunState::MainMenu{menu_selection: gui::MainMenuSelection::NewGame});
     gs.resources.insert(gamelog::GameLog{messages: vec!["Welcome to the roguelike!".to_string()]});
