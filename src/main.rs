@@ -1,3 +1,4 @@
+use map_builders::MapGenData;
 use rltk::{Rltk, GameState, RltkBuilder, Point};
 use hecs::*;
 use resources::Resources;
@@ -39,6 +40,9 @@ impl Palette {
     const COLOR_4: rltk::RGB = rltk::RGB{r: 0.7, g:0.7, b:0.};
 }
 
+const SHOW_MAPGEN_ANIMATION: bool = true;
+const MAPGEN_FRAME_TIME: f32 = 400.0;
+
 #[derive(Copy, Clone, PartialEq)]
 pub enum RunState {
     AwaitingInput,
@@ -51,7 +55,8 @@ pub enum RunState {
     MainMenu {menu_selection: gui::MainMenuSelection},
     SaveGame,
     NextLevel,
-    GameOver
+    GameOver,
+    MapGenAnimation
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
@@ -64,7 +69,8 @@ pub enum RenderOrder {
 
 pub struct State {
     world: World,
-    resources: Resources
+    resources: Resources,
+    mapgen_data: MapGenData
 }
 
 impl State {
@@ -105,36 +111,56 @@ impl State {
         ids_to_delete
     }
 
+    fn generate_map(&mut self, new_depth: i32) {
+        self.mapgen_data.index = 0;
+        self.mapgen_data.timer = 0.0;
+        self.mapgen_data.history.clear();
+
+        // Generate map
+        let mut map_builder = map_builders::random_builder(new_depth);
+        map_builder.build_map();
+
+        self.mapgen_data.history = map_builder.get_map_history();
+
+        let start_pos;
+        {
+            let mut map = self.resources.get_mut::<Map>().unwrap();
+            *map = map_builder.get_map();
+            start_pos = map_builder.get_starting_position();
+        }
+
+        // Spawn monsters and items
+        map_builder.spawn_entities(&mut self.world, &mut self.resources);
+
+        // Update player position
+        let mut player_position = self.resources.get_mut::<Point>().unwrap();
+        *player_position = Point::new(start_pos.x, start_pos.y);
+        let player_id = self.resources.get::<Entity>().unwrap();
+        let mut player_pos_comp = self.world.get_mut::<Position>(*player_id).unwrap();
+        player_pos_comp.x = start_pos.x;
+        player_pos_comp.y = start_pos.y;
+
+        // Mark viewshed as dirty
+        let player_vs = self.world.get_mut::<Viewshed>(*player_id);
+        if let Ok(mut vs) = player_vs { vs.dirty = true; }
+    }
+
     fn next_level(&mut self) {
+        // Delete all useless entities
         let ids_to_delete = self.entities_to_delete_on_level_change();
         for id in ids_to_delete {
             self.world.despawn(id).unwrap();
         }
 
-        let mut map_builder;
+        // Generate new map
         let current_depth;
-        let start_pos;
         {
-            let mut map = self.resources.get_mut::<Map>().unwrap();
+            let map = self.resources.get_mut::<Map>().unwrap();
             current_depth = map.depth;
-            map_builder = map_builders::random_builder(current_depth + 1);
-            map_builder.build_map();
-            *map = map_builder.get_map();
-            start_pos = map_builder.get_starting_position();
         }
+        self.generate_map(current_depth + 1);
 
-        map_builder.spawn_entities(&mut self.world, &mut self.resources);
-
-        let player_id = self.resources.get::<Entity>().unwrap();
-        let mut player_pos = self.resources.get_mut::<Point>().unwrap();
-        *player_pos = Point::new(start_pos.x, start_pos.y);
-        let mut player_pos_comp = self.world.get_mut::<Position>(*player_id).unwrap();
-        player_pos_comp.x = start_pos.x;
-        player_pos_comp.y = start_pos.y;
-
-        let player_vs = self.world.get_mut::<Viewshed>(*player_id);
-        if let Ok(mut vs) = player_vs { vs.dirty = true; }
-
+        // Notify player
         let mut log = self.resources.get_mut::<GameLog>().unwrap();
         log.messages.push("You descend in the staircase".to_string());
     }
@@ -143,23 +169,13 @@ impl State {
         // Delete everything
         self.world.clear();
 
-        // Create map
-        let mut map_builder;
-        let start_pos;
-        {
-            let mut map_res = self.resources.get_mut::<Map>().unwrap();
-            map_builder = map_builders::random_builder(1);
-            map_builder.build_map();
-            *map_res = map_builder.get_map();
-            start_pos = map_builder.get_starting_position();
-        }
-
-        map_builder.spawn_entities(&mut self.world, &mut self.resources);
-
         // Create player
-        let player_id = spawner::player(&mut self.world, (start_pos.x, start_pos.y));
-        self.resources.insert(Point::new(start_pos.x, start_pos.y));
+        let player_id = spawner::player(&mut self.world, (0, 0));
+        self.resources.insert(Point::new(0, 0));
         self.resources.insert(player_id);
+
+        // Generate new map
+        self.generate_map(1);
     }
 }
 
@@ -174,7 +190,7 @@ impl GameState for State {
             RunState::MainMenu{..} => {}
             RunState::GameOver => {}
             _ => {
-                map::draw_map(&self, ctx);
+                map::draw_map(&self.resources.get::<Map>().unwrap(), ctx);
 
                 {
                     let map = self.resources.get::<Map>().unwrap();
@@ -276,7 +292,7 @@ impl GameState for State {
                     gui::MainMenuResult::NoSelection{selected} => {new_runstate = RunState::MainMenu{menu_selection: selected}}
                     gui::MainMenuResult::Selection{selected} => {
                         match selected {
-                            gui::MainMenuSelection::NewGame => {new_runstate = RunState::PreRun}
+                            gui::MainMenuSelection::NewGame => {new_runstate = RunState::MapGenAnimation}
                             gui::MainMenuSelection::LoadGame => {new_runstate = RunState::PreRun}
                             gui::MainMenuSelection::Exit => {::std::process::exit(0)}
                         }
@@ -298,6 +314,7 @@ impl GameState for State {
                 }
                 */
                 println!("Saving game... TODO");
+                self.game_over_cleanup();
                 new_runstate = RunState::MainMenu{menu_selection: gui::MainMenuSelection::LoadGame};
             }
             RunState::NextLevel => {
@@ -311,6 +328,22 @@ impl GameState for State {
                     gui::GameOverResult::QuitToMenu => {
                         self.game_over_cleanup();
                         new_runstate = RunState::MainMenu {menu_selection: gui::MainMenuSelection::NewGame};
+                    }
+                }
+            }
+            RunState::MapGenAnimation => {
+                if !SHOW_MAPGEN_ANIMATION {
+                    new_runstate = RunState::PreRun;
+                }
+                ctx.cls();
+                map::draw_map(&self.mapgen_data.history[self.mapgen_data.index], ctx);
+
+                self.mapgen_data.timer += ctx.frame_time_ms;
+                if self.mapgen_data.timer > MAPGEN_FRAME_TIME {
+                    self.mapgen_data.timer = 0.0;
+                    self.mapgen_data.index += 1;
+                    if self.mapgen_data.index >= self.mapgen_data.history.len() {
+                        new_runstate = RunState::PreRun;
                     }
                 }
             }
@@ -331,26 +364,22 @@ fn main() -> rltk::BError {
 
     let mut gs = State {
         world: World::new(),
-        resources: Resources::default()
+        resources: Resources::default(),
+        mapgen_data: MapGenData{history: Vec::new(), timer: 0.0, index: 0}
     };
 
-    let mut map_builder = map_builders::random_builder(1);
-    map_builder.build_map();
-    let player_pos = map_builder.get_starting_position();
+    gs.resources.insert(Map::new(1));
+    gs.resources.insert(Point::new(0, 0));
     gs.resources.insert(rltk::RandomNumberGenerator::new());
 
-    // Player
-    let player_id = spawner::player(&mut gs.world, (player_pos.x, player_pos.y));
-
-    // Monsters and items
-    map_builder.spawn_entities(&mut gs.world, &mut gs.resources);
-
-    gs.resources.insert(map_builder.get_map());
-    gs.resources.insert(rltk::Point::new(player_pos.x, player_pos.y));
+    let player_id = spawner::player(&mut gs.world, (0, 0));
     gs.resources.insert(player_id);
+
     gs.resources.insert(RunState::MainMenu{menu_selection: gui::MainMenuSelection::NewGame});
     gs.resources.insert(gamelog::GameLog{messages: vec!["Welcome to the roguelike!".to_string()]});
     gs.resources.insert(particle_system::ParticleBuilder::new());
+
+    gs.generate_map(1);
 
     rltk::main_loop(context, gs)
 }
