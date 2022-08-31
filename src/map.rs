@@ -3,7 +3,7 @@ use serde::{Serialize, Deserialize};
 use hecs::*;
 use rltk;
 use rltk::{Rltk, Algorithm2D, BaseMap, Point};
-use crate::{State, Palette};
+use crate::Palette;
 
 
 pub const MAPWIDTH: usize = 80;
@@ -158,9 +158,7 @@ fn wall_glyph(map: &Map, x: i32, y: i32) -> char {
     }
 }
 
-pub fn draw_map(gs: &State, ctx : &mut Rltk) {
-    let map = gs.resources.get::<Map>().unwrap();
-
+pub fn draw_map(map: &Map, ctx : &mut Rltk) {
     for (idx, tile) in map.tiles.iter().enumerate() {
         if map.revealed_tiles[idx] {
             let glyph;
