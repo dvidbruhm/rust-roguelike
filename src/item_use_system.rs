@@ -30,7 +30,11 @@ pub fn item_use(world: &mut World, res: &mut Resources) {
                         // Single target
                         let idx = map.xy_idx(t.x, t.y);
                         for entity in map.tile_content[idx].iter() {
-                            targets.push(*entity);
+                            let stats = world.get::<CombatStats>(*entity);
+                            match stats {
+                                Err(_e) => {}
+                                Ok(_stats) => { targets.push(*entity) }
+                            }
                         }
                     }
                     Ok(aoe) => {
@@ -40,7 +44,11 @@ pub fn item_use(world: &mut World, res: &mut Resources) {
                         for pt in affected_tiles.iter() {
                             let idx = map.xy_idx(pt.x, pt.y);
                             for entity in map.tile_content[idx].iter() {
-                                targets.push(*entity);
+                                let stats = world.get::<CombatStats>(*entity);
+                                match stats {
+                                    Err(_e) => {}
+                                    Ok(_stats) => { targets.push(*entity) }
+                                }
                             }
                             p_builder.request(pt.x, pt.y, 0.0, 0.0, Palette::COLOR_3, Palette::MAIN_BG, rltk::to_cp437('o'), 250.0)
                         }
